@@ -1,0 +1,30 @@
+# Curr grammar. In the future, I will do more like C-Go-Rust lang combine
+# Currently, <stmt> is not an expression. But I want any statement to be an
+# expression, like in RUST.
+
+program = top_stmt* ;
+
+top_stmt = decl_stmt | stmt ;
+
+decl_stmt = "var" ident "int" ";" ;
+
+stmt = assign_stmt | print_stmt | if_stmt ;
+
+assign_stmt = ident "=" value ";" ;
+
+print_stmt = "print" "(" value ")" ";" ;
+
+if_stmt = "if" bool_expr block "else" block ;
+
+block = "{" inner_stmt* "}" ;
+
+inner_stmt = assign_stmt | print_stmt | if_stmt ;
+
+bool_expr = value comp_op value ;
+
+comp_op = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
+
+value = ident | num ;
+
+# num and ident are tokens got from lexer. I.e. ident is variable, num is number.
+# Therefore won't define it here
