@@ -10,21 +10,29 @@ decl_stmt = "var" ident "int" ";" ;
 
 stmt = assign_stmt | print_stmt | if_stmt ;
 
-assign_stmt = ident "=" value ";" ;
+assign_stmt = ident "=" expr ";" ;
 
-print_stmt = "print" "(" value ")" ";" ;
+print_stmt = "print" "(" expr ")" ";" ;
 
-if_stmt = "if" bool_expr block "else" block ;
+if_stmt = "if" bool_expr block else_tail ;
 
-block = "{" inner_stmt* "}" ;
+else_tail = "else" if_stmt | "else" block | \eps ;
 
-inner_stmt = assign_stmt | print_stmt | if_stmt ;
+block = "{" stmt* "}" ;
 
-bool_expr = value comp_op value ;
+bool_expr = expr comp_op expr ;
 
 comp_op = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
 
-value = ident | num ;
+expr = add_expr ;
+
+add_expr = mul_expr (("+" | "-") mul_expr)* ;
+
+mul_expr = unary_expr (("*" | "/" | "%") unary_expr)* ;
+
+unary_expr = ("+" | "-") final_expr ;
+
+final_expr = ident | num | "(" expr ")" ;
 
 # num and ident are tokens got from lexer. I.e. ident is variable, num is number.
 # Therefore won't define it here

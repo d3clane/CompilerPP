@@ -31,6 +31,7 @@ add_library(
   ${FLEX_CompilerLexer_OUTPUTS}
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Parser.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Printer.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/PrinterAST.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Interpreter.cpp"
 )
 

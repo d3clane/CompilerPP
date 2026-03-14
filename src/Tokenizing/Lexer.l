@@ -60,6 +60,11 @@ IDENT_BODY [A-Za-z0-9_]
 "<"             { PushToken(Tokenizing::Less{}); }
 ">"             { PushToken(Tokenizing::Greater{}); }
 "="             { PushToken(Tokenizing::Assign{}); }
+"+"             { PushToken(Tokenizing::Plus{}); }
+"-"             { PushToken(Tokenizing::Minus{}); }
+"*"             { PushToken(Tokenizing::Star{}); }
+"/"             { PushToken(Tokenizing::Slash{}); }
+"%"             { PushToken(Tokenizing::Percent{}); }
 
 ";"             { PushToken(Tokenizing::Semicolon{}); }
 "("             { PushToken(Tokenizing::LeftParen{}); }
@@ -67,7 +72,7 @@ IDENT_BODY [A-Za-z0-9_]
 "{"             { PushToken(Tokenizing::LeftBrace{}); }
 "}"             { PushToken(Tokenizing::RightBrace{}); }
 
--?[0-9]+        { PushToken(Tokenizing::Number{ParseIntegerLiteral(yytext)}); }
+[0-9]+          { PushToken(Tokenizing::Number{ParseIntegerLiteral(yytext)}); }
 
 {IDENT_START}{IDENT_BODY}* {
                   if (yyleng > 128) {

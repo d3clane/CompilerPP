@@ -20,6 +20,11 @@ ADD_TOKEN(IfKeyword)
 ADD_TOKEN(ElseKeyword)
 
 ADD_TOKEN(Assign)
+ADD_TOKEN(Plus)
+ADD_TOKEN(Minus)
+ADD_TOKEN(Star)
+ADD_TOKEN(Slash)
+ADD_TOKEN(Percent)
 ADD_TOKEN(Semicolon)
 ADD_TOKEN(LeftParen)
 ADD_TOKEN(RightParen)
@@ -52,6 +57,11 @@ using TokenVariant = std::variant<
     IfKeyword,
     ElseKeyword,
     Assign,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+    Percent,
     Semicolon,
     LeftParen,
     RightParen,

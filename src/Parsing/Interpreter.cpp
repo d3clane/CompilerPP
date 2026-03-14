@@ -7,10 +7,11 @@
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
+
 namespace {
 
-int EvaluateValue(const ValueVariant& value, const InterpreterContext& context) {
-  return std::visit(
+int EvaluateExpression(const Expression& expression, const InterpreterContext& context) {
+ return std::visit(
       Utils::Overload{
           [](const NumberExpression& number) -> int {
             return number.value;
@@ -21,8 +22,56 @@ int EvaluateValue(const ValueVariant& value, const InterpreterContext& context) 
               throw std::runtime_error("Unknown variable: " + identifier.name);
             }
             return it->second;
+          },
+          [&context](const UnaryPlusExpression& unary_expression) -> int {
+            assert(unary_expression.operand != nullptr);
+            return EvaluateExpression(*unary_expression.operand, context);
+          },
+          [&context](const UnaryMinusExpression& unary_expression) -> int {
+            assert(unary_expression.operand != nullptr);
+            return -EvaluateExpression(*unary_expression.operand, context);
+          },
+          [&context](const AddExpression& add_expression) -> int {
+            assert(add_expression.left != nullptr);
+            assert(add_expression.right != nullptr);
+            return EvaluateExpression(*add_expression.left, context) +
+                   EvaluateExpression(*add_expression.right, context);
+          },
+          [&context](const SubtractExpression& subtract_expression) -> int {
+            assert(subtract_expression.left != nullptr);
+            assert(subtract_expression.right != nullptr);
+            return EvaluateExpression(*subtract_expression.left, context) -
+                   EvaluateExpression(*subtract_expression.right, context);
+          },
+          [&context](const MultiplyExpression& multiply_expression) -> int {
+            assert(multiply_expression.left != nullptr);
+            assert(multiply_expression.right != nullptr);
+            return EvaluateExpression(*multiply_expression.left, context) *
+                   EvaluateExpression(*multiply_expression.right, context);
+          },
+          [&context](const DivideExpression& divide_expression) -> int {
+            assert(divide_expression.left != nullptr);
+            assert(divide_expression.right != nullptr);
+
+            const int divisor = EvaluateExpression(*divide_expression.right, context);
+            if (divisor == 0) {
+              throw std::runtime_error("Division by zero");
+            }
+
+            return EvaluateExpression(*divide_expression.left, context) / divisor;
+          },
+          [&context](const ModuloExpression& modulo_expression) -> int {
+            assert(modulo_expression.left != nullptr);
+            assert(modulo_expression.right != nullptr);
+
+            const int divisor = EvaluateExpression(*modulo_expression.right, context);
+            if (divisor == 0) {
+              throw std::runtime_error("Modulo by zero");
+            }
+
+            return EvaluateExpression(*modulo_expression.left, context) % divisor;
           }},
-      value);
+      expression.value);
 }
 
 bool EvaluateComparison(const ComparisonOperatorVariant& op, int left, int right) {
@@ -42,22 +91,22 @@ bool EvaluateBoolExpression(const BoolExpression& expression, const InterpreterC
   assert(expression.op != nullptr);
   assert(expression.right != nullptr);
 
-  const int left_value = EvaluateValue(*expression.left, context);
-  const int right_value = EvaluateValue(*expression.right, context);
+  const int left_value = EvaluateExpression(*expression.left, context);
+  const int right_value = EvaluateExpression(*expression.right, context);
   return EvaluateComparison(*expression.op, left_value, right_value);
 }
 
 void ExecuteBlock(const Block& block, InterpreterContext& context, std::ostream& output);
 
 void ExecuteAssignment(const AssignmentStatement& assignment, InterpreterContext& context) {
-  assert(assignment.value != nullptr);
+  assert(assignment.expr != nullptr);
 
   const auto it = context.variables.find(assignment.variable_name);
   if (it == context.variables.end()) {
     throw std::runtime_error("Variable is not declared before assignment: " + assignment.variable_name);
   }
 
-  const int new_value = EvaluateValue(*assignment.value, context);
+  const int new_value = EvaluateExpression(*assignment.expr, context);
   context.variables[assignment.variable_name] = new_value;
 }
 
@@ -65,9 +114,9 @@ void ExecutePrint(
     const PrintStatement& print_statement,
     InterpreterContext& context,
     std::ostream& output) {
-  assert(print_statement.value != nullptr);
+  assert(print_statement.expr != nullptr);
 
-  const int print_value = EvaluateValue(*print_statement.value, context);
+  const int print_value = EvaluateExpression(*print_statement.expr, context);
   output << print_value << "\n";
 }
 
@@ -77,13 +126,22 @@ void ExecuteIf(
     std::ostream& output) {
   assert(if_statement.condition != nullptr);
   assert(if_statement.true_block != nullptr);
-  assert(if_statement.false_block != nullptr);
-
+  assert(if_statement.else_tail != nullptr);
+  assert(!(if_statement.else_tail->else_if != nullptr &&
+           if_statement.else_tail->else_block != nullptr));
   const bool condition_result = EvaluateBoolExpression(*if_statement.condition, context);
   if (condition_result) {
     ExecuteBlock(*if_statement.true_block, context, output);
-  } else {
-    ExecuteBlock(*if_statement.false_block, context, output);
+    return;
+  }
+
+  if (if_statement.else_tail->else_if != nullptr) {
+    ExecuteIf(*if_statement.else_tail->else_if, context, output);
+    return;
+  }
+
+  if (if_statement.else_tail->else_block != nullptr) {
+    ExecuteBlock(*if_statement.else_tail->else_block, context, output);
   }
 }
 
@@ -151,7 +209,7 @@ InterpreterContext Interpret(const Program& program, std::ostream& output) {
   }
 
   return context;
-}
+} 
 
 InterpreterContext Interpret(const Program& program) {
   return Interpret(program, std::cout);
