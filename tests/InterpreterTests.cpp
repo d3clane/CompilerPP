@@ -153,4 +153,25 @@ TEST(InterpreterTests, ThrowsOnDivisionByZero) {
   EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
 }
 
+TEST(InterpreterTests, DivisionLeftRecursionTest) {
+  const std::string source =
+      "print(100 / 5 / 2);\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  EXPECT_EQ(output.str(), "10\n");
+}
+
+TEST(InterpreterTests, SubstractionLeftRecursionTest) {
+  const std::string source =
+      "print(100 - 5 - 2);\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  EXPECT_EQ(output.str(), "93\n");
+}
+
+
 }  // namespace

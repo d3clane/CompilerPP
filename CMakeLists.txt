@@ -44,6 +44,19 @@ target_include_directories(
 
 target_compile_features(compiler_frontend PUBLIC cxx_std_20)
 
+add_executable(
+  compiler_frontend_cli
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+)
+
+target_link_libraries(
+  compiler_frontend_cli
+  PRIVATE
+    compiler_frontend
+)
+
+target_compile_features(compiler_frontend_cli PRIVATE cxx_std_20)
+
 enable_testing()
 
 find_package(GTest REQUIRED)
