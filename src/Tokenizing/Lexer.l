@@ -99,8 +99,7 @@ std::vector<TokenVariant> Tokenize(const std::string& input) {
   std::vector<TokenVariant> tokens;
   g_tokens = &tokens;
 
-  const int input_length = static_cast<int>(input.size());
-  YY_BUFFER_STATE buffer = yy_scan_bytes(input.c_str(), input_length);
+  YY_BUFFER_STATE buffer = yy_scan_bytes(input.c_str(), static_cast<int>(input.size()));
 
   try {
     yylex();

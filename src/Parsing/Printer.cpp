@@ -194,10 +194,10 @@ std::string PrintBlock(const Block& block) {
   }
 
   std::string result = "{ ";
-  for (int i = 0; i < static_cast<int>(block.statements.size()); ++i) {
+  for (size_t i = 0; i < block.statements.size(); ++i) {
     assert(block.statements[i] != nullptr);
     result += PrintStatementNode(*block.statements[i]);
-    if (i + 1 < static_cast<int>(block.statements.size())) {
+    if (i + 1 < block.statements.size()) {
       result += " ";
     }
   }
@@ -268,7 +268,7 @@ std::string PrintTopStatement(const TopStatementVariant& statement) {
 
 std::string PrintInfix(const Program& program) {
   std::string result;
-  for (int i = 0; i < static_cast<int>(program.top_statements.size()); ++i) {
+  for (size_t i = 0; i < program.top_statements.size(); ++i) {
     assert(program.top_statements[i] != nullptr);
     result += PrintTopStatement(*program.top_statements[i]) + "\n";
   }

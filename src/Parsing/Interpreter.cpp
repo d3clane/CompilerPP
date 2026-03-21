@@ -164,7 +164,7 @@ void ExecuteStatement(
 }
 
 void ExecuteBlock(const Block& block, InterpreterContext& context, std::ostream& output) {
-  for (int i = 0; i < static_cast<int>(block.statements.size()); ++i) {
+  for (size_t i = 0; i < block.statements.size(); ++i) {
     assert(block.statements[i] != nullptr);
     ExecuteStatement(*block.statements[i], context, output);
   }
@@ -203,7 +203,7 @@ void ExecuteTopStatement(
 InterpreterContext Interpret(const Program& program, std::ostream& output) {
   InterpreterContext context;
 
-  for (int i = 0; i < static_cast<int>(program.top_statements.size()); ++i) {
+  for (size_t i = 0; i < program.top_statements.size(); ++i) {
     assert(program.top_statements[i] != nullptr);
     ExecuteTopStatement(*program.top_statements[i], context, output);
   }

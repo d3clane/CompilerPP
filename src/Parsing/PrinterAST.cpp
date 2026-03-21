@@ -114,7 +114,7 @@ void PrintBlockTree(const Block& block, int indent, std::string& output) {
     return;
   }
 
-  for (int i = 0; i < static_cast<int>(block.statements.size()); ++i) {
+  for (size_t i = 0; i < block.statements.size(); ++i) {
     assert(block.statements[i] != nullptr);
     PrintStatementTree(*block.statements[i], indent + 1, output);
   }
@@ -207,7 +207,7 @@ std::string PrintAstTree(const Program& program) {
     return result;
   }
 
-  for (int i = 0; i < static_cast<int>(program.top_statements.size()); ++i) {
+  for (size_t i = 0; i < program.top_statements.size(); ++i) {
     assert(program.top_statements[i] != nullptr);
     PrintTopStatementTree(*program.top_statements[i], 1, result);
   }

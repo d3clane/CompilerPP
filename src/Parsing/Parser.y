@@ -20,7 +20,7 @@ namespace Parsing {
 
 struct ParserState {
   const std::vector<Tokenizing::TokenVariant>& tokens;
-  int current_index;
+  size_t current_index;
 };
 
 }  // namespace Parsing
@@ -314,7 +314,7 @@ final_expr:
 namespace Parsing {
 
 BisonParser::symbol_type yylex(ParserState& state) {
-  if (state.current_index >= static_cast<int>(state.tokens.size())) {
+  if (state.current_index >= state.tokens.size()) {
     return BisonParser::make_YYEOF();
   }
 
