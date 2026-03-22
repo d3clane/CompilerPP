@@ -1,38 +1,72 @@
-# Curr grammar. In the future, I will do more like C-Go-Rust lang combine
-# Currently, <stmt> is not an expression. But I want any statement to be an
-# expression, like in RUST.
+program = stmt* ;
 
-program = top_stmt* ;
+stmt = decl_stmt | assign_stmt | print_stmt | if_stmt | return_stmt | expr_stmt | block ;
 
-top_stmt = decl_stmt | stmt ;
+decl_stmt = var_decl | func_decl ;
 
-decl_stmt = "var" ident "int" ";" ;
+var_decl = "var" mutable_opt ident type init_opt ";" ;
 
-stmt = assign_stmt | print_stmt | if_stmt ;
+mutable_opt = "mutable" | \eps ;
+
+init_opt = "=" expr | \eps ;
+
+func_decl = "func" ident "(" param_list_opt ")" return_type_opt block ;
+
+param_list_opt = param_list | \eps ;
+
+param_list = param ("," param)* ;
+
+param = ident type ;
+
+return_type_opt = type | \eps ;
+
+type = "int" | "bool" ;
 
 assign_stmt = ident "=" expr ";" ;
 
 print_stmt = "print" "(" expr ")" ";" ;
 
-if_stmt = "if" bool_expr block else_tail ;
+if_stmt = "if" expr block else_tail ;
 
 else_tail = "else" if_stmt | "else" block | \eps ;
 
+return_stmt = "return" return_arg_opt ";" ;
+
+return_arg_opt = expr | \eps ;
+
+expr_stmt = expr ";" ;
+
 block = "{" stmt* "}" ;
 
-bool_expr = expr comp_op expr ;
+func_call = ident "(" call_args_opt ")" ;
 
-comp_op = "==" | "!=" | "<" | ">" | "<=" | ">=" ;
+call_args_opt = call_args | \eps ;
 
-expr = add_expr ;
+call_args = named_arg_list | pos_arg_list ;
+
+named_arg_list = named_arg ("," named_arg)* ;
+
+named_arg = ident ":" expr ;
+
+pos_arg_list = expr ("," expr)* ;
+
+expr = logic_or_expr ;
+
+logic_or_expr = logic_and_expr ("||" logic_and_expr)* ;
+
+logic_and_expr = equality_expr ("&&" equality_expr)* ;
+
+equality_expr = relational_expr (("==" | "!=") relational_expr)* ;
+
+relational_expr = add_expr (("<" | ">" | "<=" | ">=") add_expr)* ;
 
 add_expr = mul_expr (("+" | "-") mul_expr)* ;
 
 mul_expr = unary_expr (("*" | "/" | "%") unary_expr)* ;
 
-unary_expr = ("+" | "-") final_expr ;
+unary_expr = ("+" | "-" | "!") unary_expr | final_expr ;
 
-final_expr = ident | num | "(" expr ")" ;
+final_expr = ident | num | "true" | "false" | func_call | "(" expr ")" ;
 
 # num and ident are tokens got from lexer. I.e. ident is variable, num is number.
 # Therefore won't define it here
