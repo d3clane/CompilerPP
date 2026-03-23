@@ -3,7 +3,7 @@
 #include <iterator>
 #include <string>
 
-#include "Parsing/Interpreter.hpp"
+#include "Visitors/Interpreter.hpp"
 #include "Parsing/Parser.hpp"
 
 int main(int argc, char* argv[]) {

@@ -4,7 +4,7 @@
 
 #include "Parsing/Ast.hpp"
 #include "Parsing/Parser.hpp"
-#include "Parsing/SymbolTable.hpp"
+#include "SemanticAnalysis/SymbolTable.hpp"
 
 namespace {
 

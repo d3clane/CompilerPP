@@ -1,4 +1,4 @@
-#include "Parsing/Printer.hpp"
+#include "Visitors/Printer.hpp"
 
 #include <cassert>
 #include <type_traits>

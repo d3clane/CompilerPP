@@ -14,14 +14,14 @@ file(MAKE_DIRECTORY "${GENERATED_DIR}")
 
 BISON_TARGET(
   CompilerParser
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Parser.y"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.y"
   "${GENERATED_DIR}/BisonParser.cpp"
   DEFINES_FILE "${GENERATED_DIR}/BisonParser.hpp"
 )
 
 FLEX_TARGET(
   CompilerLexer
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Tokenizing/Lexer.l"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Tokenizing/Lexer.l"
   "${GENERATED_DIR}/FlexLexer.cpp"
 )
 
@@ -29,17 +29,17 @@ add_library(
   compiler_frontend
   ${BISON_CompilerParser_OUTPUTS}
   ${FLEX_CompilerLexer_OUTPUTS}
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Parser.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Printer.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/PrinterAST.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Interpreter.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/SymbolTable.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Printer.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Interpreter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/SymbolTable.cpp"
 )
 
 target_include_directories(
   compiler_frontend
   PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/frontend"
     "${GENERATED_DIR}"
 )
 
@@ -47,7 +47,7 @@ target_compile_features(compiler_frontend PUBLIC cxx_std_20)
 
 add_executable(
   compiler_frontend_cli
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/main.cpp"
 )
 
 target_link_libraries(

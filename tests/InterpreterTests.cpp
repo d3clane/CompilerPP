@@ -3,7 +3,7 @@
 
 #include <gtest/gtest.h>
 
-#include "Parsing/Interpreter.hpp"
+#include "Visitors/Interpreter.hpp"
 #include "Parsing/Parser.hpp"
 
 namespace {

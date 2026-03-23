@@ -1,4 +1,4 @@
-#include "Parsing/SymbolTable.hpp"
+#include "SemanticAnalysis/SymbolTable.hpp"
 
 #include <cassert>
 #include <stdexcept>

@@ -4,8 +4,8 @@
 
 #include "Parsing/Ast.hpp"
 #include "Parsing/Parser.hpp"
-#include "Parsing/Printer.hpp"
-#include "Parsing/PrinterAST.hpp"
+#include "Visitors/Printer.hpp"
+#include "Visitors/PrinterAST.hpp"
 
 namespace {
 
