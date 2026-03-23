@@ -10,6 +10,7 @@
 
 %code requires {
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -37,19 +38,29 @@ namespace Parsing {
 
 BisonParser::symbol_type yylex(ParserState& state);
 
-TopStatementVariant StatementToTopStatement(StatementVariant statement) {
-  return std::visit(
-      Utils::Overload{
-          [](AssignmentStatement value) -> TopStatementVariant {
-            return TopStatementVariant{std::move(value)};
-          },
-          [](PrintStatement value) -> TopStatementVariant {
-            return TopStatementVariant{std::move(value)};
-          },
-          [](IfStatement value) -> TopStatementVariant {
-            return TopStatementVariant{std::move(value)};
-          }},
-      std::move(statement));
+template <typename T>
+Expression MakeBinaryExpression(Expression left, Expression right) {
+  return Expression{ExpressionVariant{T{
+      std::make_unique<Expression>(std::move(left)),
+      std::make_unique<Expression>(std::move(right))}}};
+}
+
+template <typename T>
+Expression MakeUnaryExpression(Expression operand) {
+  return Expression{ExpressionVariant{T{
+      std::make_unique<Expression>(std::move(operand))}}};
+}
+
+std::unique_ptr<CallArgument> MakePositionalArgument(Expression value) {
+  return std::make_unique<CallArgument>(
+      PositionalCallArgument{std::make_unique<Expression>(std::move(value))});
+}
+
+std::unique_ptr<CallArgument> MakeNamedArgument(
+    std::string name,
+    Expression value) {
+  return std::make_unique<CallArgument>(
+      NamedCallArgument{std::move(name), std::make_unique<Expression>(std::move(value))});
 }
 
 }  // namespace Parsing
@@ -61,17 +72,28 @@ TopStatementVariant StatementToTopStatement(StatementVariant statement) {
 
 %token VAR_KW "var"
 %token INT_KW "int"
+%token BOOL_KW "bool"
+%token MUTABLE_KW "mutable"
+%token FUNC_KW "func"
+%token RETURN_KW "return"
+%token TRUE_KW "true"
+%token FALSE_KW "false"
 %token PRINT_KW "print"
 %token IF_KW "if"
 %token ELSE_KW "else"
 
 %token ASSIGN "="
+%token AND_AND "&&"
+%token OR_OR "||"
+%token NOT "!"
 %token PLUS "+"
 %token MINUS "-"
 %token STAR "*"
 %token SLASH "/"
 %token PERCENT "%"
 %token SEMICOLON ";"
+%token COMMA ","
+%token COLON ":"
 %token LEFT_PAREN "("
 %token RIGHT_PAREN ")"
 %token LEFT_BRACE "{"
@@ -87,19 +109,44 @@ TopStatementVariant StatementToTopStatement(StatementVariant statement) {
 %token <std::string> IDENT
 %token <int> NUM
 
-%type <std::vector<std::unique_ptr<TopStatementVariant>>> top_stmt_list
-%type <std::unique_ptr<TopStatementVariant>> top_stmt
-%type <DeclarationStatement> decl_stmt
-%type <StatementVariant> stmt
+%type <List<Statement>> stmt_list
+
+%type <Statement> stmt
+%type <Statement> decl_stmt
+%type <DeclarationStatement> var_decl
+%type <FunctionDeclarationStatement> func_decl
 %type <AssignmentStatement> assign_stmt
 %type <PrintStatement> print_stmt
 %type <IfStatement> if_stmt
+%type <ReturnStatement> return_stmt
+%type <Expression> expr_stmt
+%type <Block> block_stmt
+
 %type <ElseTail> else_tail
 %type <Block> block
-%type <std::vector<std::unique_ptr<StatementVariant>>> inner_stmt_list
-%type <BoolExpression> bool_expr
-%type <ComparisonOperatorVariant> comp_op
+
+%type <bool> mutable_opt
+%type <Type> type
+%type <std::optional<Type>> return_type_opt
+%type <std::vector<FunctionParameter>> param_list_opt
+%type <std::vector<FunctionParameter>> param_list
+%type <FunctionParameter> param
+
+%type <FunctionCall> func_call
+%type <List<CallArgument>> call_args_opt
+%type <List<CallArgument>> call_args
+%type <List<CallArgument>> named_arg_list
+%type <List<CallArgument>> pos_arg_list
+%type <std::unique_ptr<CallArgument>> named_arg
+
+%type <std::unique_ptr<Expression>> init_opt
+%type <std::unique_ptr<Expression>> return_arg_opt
+
 %type <Expression> expr
+%type <Expression> logic_or_expr
+%type <Expression> logic_and_expr
+%type <Expression> equality_expr
+%type <Expression> relational_expr
 %type <Expression> add_expr
 %type <Expression> mul_expr
 %type <Expression> unary_expr
@@ -110,45 +157,133 @@ TopStatementVariant StatementToTopStatement(StatementVariant statement) {
 %%
 
 program:
-    top_stmt_list {
+    stmt_list {
       output.top_statements = std::move($1);
     }
 ;
 
-top_stmt_list:
+stmt_list:
     %empty {
-      $$ = std::vector<std::unique_ptr<TopStatementVariant>>();
+      $$ = List<Statement>();
     }
-  | top_stmt_list top_stmt {
-      $1.push_back(std::move($2));
+  | stmt_list stmt {
+      $1.push_back(std::make_unique<Statement>(std::move($2)));
       $$ = std::move($1);
     }
 ;
 
-top_stmt:
+stmt:
     decl_stmt {
-      $$ = std::make_unique<TopStatementVariant>(std::move($1));
+      $$ = std::move($1);
     }
-  | stmt {
-      $$ = std::make_unique<TopStatementVariant>(StatementToTopStatement(std::move($1)));
+  | assign_stmt {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
+  | print_stmt {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
+  | if_stmt {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
+  | return_stmt {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
+  | expr_stmt {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
+  | block_stmt {
+      $$ = Statement{StatementVariant{std::move($1)}};
     }
 ;
 
 decl_stmt:
-    VAR_KW IDENT INT_KW SEMICOLON {
-      $$ = DeclarationStatement{std::move($2), "int"};
+    var_decl {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
+  | func_decl {
+      $$ = Statement{StatementVariant{std::move($1)}};
     }
 ;
 
-stmt:
-    assign_stmt {
-      $$ = StatementVariant{std::move($1)};
+var_decl:
+    VAR_KW mutable_opt IDENT type init_opt SEMICOLON {
+      $$ = DeclarationStatement{
+          std::move($3),
+          std::move($4),
+          $2,
+          std::move($5)};
     }
-  | print_stmt {
-      $$ = StatementVariant{std::move($1)};
+;
+
+func_decl:
+    FUNC_KW IDENT LEFT_PAREN param_list_opt RIGHT_PAREN return_type_opt block {
+      $$ = FunctionDeclarationStatement{
+          std::move($2),
+          std::move($4),
+          std::move($6),
+          std::make_unique<Block>(std::move($7))};
     }
-  | if_stmt {
-      $$ = StatementVariant{std::move($1)};
+;
+
+mutable_opt:
+    %empty {
+      $$ = false;
+    }
+  | MUTABLE_KW {
+      $$ = true;
+    }
+;
+
+init_opt:
+    %empty {
+      $$ = nullptr;
+    }
+  | ASSIGN expr {
+      $$ = std::make_unique<Expression>(std::move($2));
+    }
+;
+
+param_list_opt:
+    %empty {
+      $$ = std::vector<FunctionParameter>();
+    }
+  | param_list {
+      $$ = std::move($1);
+    }
+;
+
+param_list:
+    param {
+      $$ = std::vector<FunctionParameter>();
+      $$.push_back(std::move($1));
+    }
+  | param_list COMMA param {
+      $1.push_back(std::move($3));
+      $$ = std::move($1);
+    }
+;
+
+param:
+    IDENT type {
+      $$ = FunctionParameter{std::move($1), std::move($2)};
+    }
+;
+
+type:
+    INT_KW {
+      $$ = Type{IntType{}};
+    }
+  | BOOL_KW {
+      $$ = Type{BoolType{}};
+    }
+;
+
+return_type_opt:
+    %empty {
+      $$ = std::nullopt;
+    }
+  | type {
+      $$ = std::optional<Type>{std::move($1)};
     }
 ;
 
@@ -168,9 +303,9 @@ print_stmt:
 ;
 
 if_stmt:
-    IF_KW bool_expr block else_tail {
+    IF_KW expr block else_tail {
       $$ = IfStatement{
-          std::make_unique<BoolExpression>(std::move($2)),
+          std::make_unique<Expression>(std::move($2)),
           std::make_unique<Block>(std::move($3)),
           std::make_unique<ElseTail>(std::move($4))};
     }
@@ -189,60 +324,148 @@ else_tail:
     }
   | ELSE_KW if_stmt {
       $$ = ElseTail{
-        std::make_unique<IfStatement>(std::move($2)),
-        nullptr};
+          std::make_unique<IfStatement>(std::move($2)),
+          nullptr};
+    }
+;
+
+return_stmt:
+    RETURN_KW return_arg_opt SEMICOLON {
+      $$ = ReturnStatement{
+          std::move($2)};
+    }
+;
+
+return_arg_opt:
+    %empty {
+      $$ = nullptr;
+    }
+  | expr {
+      $$ = std::make_unique<Expression>(std::move($1));
+    }
+;
+
+expr_stmt:
+    expr SEMICOLON {
+      $$ = std::move($1);
+    }
+;
+
+block_stmt:
+    block {
+      $$ = std::move($1);
     }
 ;
 
 block:
-    LEFT_BRACE inner_stmt_list RIGHT_BRACE {
+    LEFT_BRACE stmt_list RIGHT_BRACE {
       $$ = Block{std::move($2)};
     }
 ;
 
-inner_stmt_list:
-    %empty {
-      $$ = std::vector<std::unique_ptr<StatementVariant>>();
+func_call:
+    IDENT LEFT_PAREN call_args_opt RIGHT_PAREN {
+      $$ = FunctionCall{std::move($1), std::move($3)};
     }
-  | inner_stmt_list stmt {
-      $1.push_back(std::make_unique<StatementVariant>(std::move($2)));
+;
+
+call_args_opt:
+    %empty {
+      $$ = List<CallArgument>();
+    }
+  | call_args {
       $$ = std::move($1);
     }
 ;
 
-bool_expr:
-    expr comp_op expr {
-      $$ = BoolExpression{
-          std::make_unique<Expression>(std::move($1)),
-          std::make_unique<ComparisonOperatorVariant>(std::move($2)),
-          std::make_unique<Expression>(std::move($3))};
+call_args:
+    named_arg_list {
+      $$ = std::move($1);
+    }
+  | pos_arg_list {
+      $$ = std::move($1);
     }
 ;
 
-comp_op:
-    EQUAL_EQUAL {
-      $$ = ComparisonOperatorVariant{EqualComparison{}};
+named_arg_list:
+    named_arg {
+      $$ = List<CallArgument>();
+      $$.push_back(std::move($1));
     }
-  | NOT_EQUAL {
-      $$ = ComparisonOperatorVariant{NotEqualComparison{}};
+  | named_arg_list COMMA named_arg {
+      $1.push_back(std::move($3));
+      $$ = std::move($1);
     }
-  | LESS {
-      $$ = ComparisonOperatorVariant{LessComparison{}};
+;
+
+named_arg:
+    IDENT COLON expr {
+      $$ = MakeNamedArgument(std::move($1), std::move($3));
     }
-  | GREATER {
-      $$ = ComparisonOperatorVariant{GreaterComparison{}};
+;
+
+pos_arg_list:
+    expr {
+      $$ = List<CallArgument>();
+      $$.push_back(MakePositionalArgument(std::move($1)));
     }
-  | LESS_EQUAL {
-      $$ = ComparisonOperatorVariant{LessEqualComparison{}};
-    }
-  | GREATER_EQUAL {
-      $$ = ComparisonOperatorVariant{GreaterEqualComparison{}};
+  | pos_arg_list COMMA expr {
+      $1.push_back(MakePositionalArgument(std::move($3)));
+      $$ = std::move($1);
     }
 ;
 
 expr:
+    logic_or_expr {
+      $$ = std::move($1);
+    }
+;
+
+logic_or_expr:
+    logic_and_expr {
+      $$ = std::move($1);
+    }
+  | logic_or_expr OR_OR logic_and_expr {
+      $$ = MakeBinaryExpression<LogicalOrExpression>(std::move($1), std::move($3));
+    }
+;
+
+logic_and_expr:
+    equality_expr {
+      $$ = std::move($1);
+    }
+  | logic_and_expr AND_AND equality_expr {
+      $$ = MakeBinaryExpression<LogicalAndExpression>(std::move($1), std::move($3));
+    }
+;
+
+equality_expr:
+    relational_expr {
+      $$ = std::move($1);
+    }
+  | equality_expr EQUAL_EQUAL relational_expr {
+      $$ = MakeBinaryExpression<EqualExpression>(std::move($1), std::move($3));
+    }
+  | equality_expr NOT_EQUAL relational_expr {
+      $$ = MakeBinaryExpression<NotEqualExpression>(std::move($1), std::move($3));
+    }
+;
+
+relational_expr:
     add_expr {
       $$ = std::move($1);
+    }
+  | relational_expr LESS add_expr {
+      $$ = MakeBinaryExpression<LessExpression>(std::move($1), std::move($3));
+    }
+  | relational_expr GREATER add_expr {
+      $$ = MakeBinaryExpression<GreaterExpression>(std::move($1), std::move($3));
+    }
+  | relational_expr LESS_EQUAL add_expr {
+      $$ = MakeBinaryExpression<LessEqualExpression>(std::move($1), std::move($3));
+    }
+  | relational_expr GREATER_EQUAL add_expr {
+      $$ = MakeBinaryExpression<GreaterEqualExpression>(std::move($1), std::move($3));
     }
 ;
 
@@ -251,14 +474,10 @@ add_expr:
       $$ = std::move($1);
     }
   | add_expr PLUS mul_expr {
-      $$ = Expression{AddExpression{
-          std::make_unique<Expression>(std::move($1)),
-          std::make_unique<Expression>(std::move($3))}};
+      $$ = MakeBinaryExpression<AddExpression>(std::move($1), std::move($3));
     }
   | add_expr MINUS mul_expr {
-      $$ = Expression{SubtractExpression{
-          std::make_unique<Expression>(std::move($1)),
-          std::make_unique<Expression>(std::move($3))}};
+      $$ = MakeBinaryExpression<SubtractExpression>(std::move($1), std::move($3));
     }
 ;
 
@@ -267,19 +486,13 @@ mul_expr:
       $$ = std::move($1);
     }
   | mul_expr STAR unary_expr {
-      $$ = Expression{MultiplyExpression{
-          std::make_unique<Expression>(std::move($1)),
-          std::make_unique<Expression>(std::move($3))}};
+      $$ = MakeBinaryExpression<MultiplyExpression>(std::move($1), std::move($3));
     }
   | mul_expr SLASH unary_expr {
-      $$ = Expression{DivideExpression{
-          std::make_unique<Expression>(std::move($1)),
-          std::make_unique<Expression>(std::move($3))}};
+      $$ = MakeBinaryExpression<DivideExpression>(std::move($1), std::move($3));
     }
   | mul_expr PERCENT unary_expr {
-      $$ = Expression{ModuloExpression{
-          std::make_unique<Expression>(std::move($1)),
-          std::make_unique<Expression>(std::move($3))}};
+      $$ = MakeBinaryExpression<ModuloExpression>(std::move($1), std::move($3));
     }
 ;
 
@@ -288,21 +501,31 @@ unary_expr:
       $$ = std::move($1);
     }
   | PLUS unary_expr {
-      $$ = Expression{UnaryPlusExpression{
-          std::make_unique<Expression>(std::move($2))}};
+      $$ = MakeUnaryExpression<UnaryPlusExpression>(std::move($2));
     }
   | MINUS unary_expr {
-      $$ = Expression{UnaryMinusExpression{
-          std::make_unique<Expression>(std::move($2))}};
+      $$ = MakeUnaryExpression<UnaryMinusExpression>(std::move($2));
+    }
+  | NOT unary_expr {
+      $$ = MakeUnaryExpression<UnaryNotExpression>(std::move($2));
     }
 ;
 
 final_expr:
     IDENT {
-      $$ = Expression{IdentifierExpression{std::move($1)}};
+      $$ = Expression{ExpressionVariant{IdentifierExpression{std::move($1)}}};
     }
   | NUM {
-      $$ = Expression{NumberExpression{$1}};
+      $$ = Expression{ExpressionVariant{LiteralExpression{LiteralValue{$1}}}};
+    }
+  | TRUE_KW {
+      $$ = Expression{ExpressionVariant{LiteralExpression{LiteralValue{true}}}};
+    }
+  | FALSE_KW {
+      $$ = Expression{ExpressionVariant{LiteralExpression{LiteralValue{false}}}};
+    }
+  | func_call {
+      $$ = Expression{ExpressionVariant{std::move($1)}};
     }
   | LEFT_PAREN expr RIGHT_PAREN {
       $$ = std::move($2);
@@ -329,6 +552,24 @@ BisonParser::symbol_type yylex(ParserState& state) {
           [](const Tokenizing::IntKeyword&) -> BisonParser::symbol_type {
             return BisonParser::make_INT_KW();
           },
+          [](const Tokenizing::BoolKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_BOOL_KW();
+          },
+          [](const Tokenizing::MutableKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_MUTABLE_KW();
+          },
+          [](const Tokenizing::FuncKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_FUNC_KW();
+          },
+          [](const Tokenizing::ReturnKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_RETURN_KW();
+          },
+          [](const Tokenizing::TrueKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_TRUE_KW();
+          },
+          [](const Tokenizing::FalseKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_FALSE_KW();
+          },
           [](const Tokenizing::PrintKeyword&) -> BisonParser::symbol_type {
             return BisonParser::make_PRINT_KW();
           },
@@ -340,6 +581,15 @@ BisonParser::symbol_type yylex(ParserState& state) {
           },
           [](const Tokenizing::Assign&) -> BisonParser::symbol_type {
             return BisonParser::make_ASSIGN();
+          },
+          [](const Tokenizing::AndAnd&) -> BisonParser::symbol_type {
+            return BisonParser::make_AND_AND();
+          },
+          [](const Tokenizing::OrOr&) -> BisonParser::symbol_type {
+            return BisonParser::make_OR_OR();
+          },
+          [](const Tokenizing::Not&) -> BisonParser::symbol_type {
+            return BisonParser::make_NOT();
           },
           [](const Tokenizing::Plus&) -> BisonParser::symbol_type {
             return BisonParser::make_PLUS();
@@ -358,6 +608,12 @@ BisonParser::symbol_type yylex(ParserState& state) {
           },
           [](const Tokenizing::Semicolon&) -> BisonParser::symbol_type {
             return BisonParser::make_SEMICOLON();
+          },
+          [](const Tokenizing::Comma&) -> BisonParser::symbol_type {
+            return BisonParser::make_COMMA();
+          },
+          [](const Tokenizing::Colon&) -> BisonParser::symbol_type {
+            return BisonParser::make_COLON();
           },
           [](const Tokenizing::LeftParen&) -> BisonParser::symbol_type {
             return BisonParser::make_LEFT_PAREN();

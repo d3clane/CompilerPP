@@ -8,20 +8,27 @@
 
 namespace {
 
-TEST(InterpreterTests, ExecutesTrueBranchAndPrintsValues) {
+TEST(InterpreterTests, ExecutesIntAndBoolBranches) {
   const std::string source =
       "var x int;\n"
+      "var flag bool = true;\n"
       "x = 5;\n"
-      "if x > 3 { print(x); x = 10; } else { print(0); }\n"
-      "print(x);\n";
+      "if flag && x > 3 { print(x); flag = false; } else { print(0); }\n"
+      "print(flag);\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
 
-  EXPECT_EQ(output.str(), "5\n10\n");
+  EXPECT_EQ(output.str(), "5\nfalse\n");
   ASSERT_EQ(context.variables.count("x"), 1);
-  EXPECT_EQ(context.variables.at("x"), 10);
+  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_value, nullptr);
+  EXPECT_EQ(*x_value, 5);
+  ASSERT_EQ(context.variables.count("flag"), 1);
+  const auto* flag_value = std::get_if<bool>(&context.variables.at("flag"));
+  ASSERT_NE(flag_value, nullptr);
+  EXPECT_FALSE(*flag_value);
 }
 
 TEST(InterpreterTests, ExecutesFalseBranchAndKeepsOrder) {
@@ -37,7 +44,9 @@ TEST(InterpreterTests, ExecutesFalseBranchAndKeepsOrder) {
 
   EXPECT_EQ(output.str(), "-1\n2\n");
   ASSERT_EQ(context.variables.count("x"), 1);
-  EXPECT_EQ(context.variables.at("x"), 2);
+  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_value, nullptr);
+  EXPECT_EQ(*x_value, 2);
 }
 
 TEST(InterpreterTests, ExecutesElseIfBranch) {
@@ -53,7 +62,9 @@ TEST(InterpreterTests, ExecutesElseIfBranch) {
 
   EXPECT_EQ(output.str(), "1\n7\n");
   ASSERT_EQ(context.variables.count("x"), 1);
-  EXPECT_EQ(context.variables.at("x"), 7);
+  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_value, nullptr);
+  EXPECT_EQ(*x_value, 7);
 }
 
 TEST(InterpreterTests, ExecutesMultipleElseIfBranches) {
@@ -69,7 +80,9 @@ TEST(InterpreterTests, ExecutesMultipleElseIfBranches) {
 
   EXPECT_EQ(output.str(), "2\n9\n");
   ASSERT_EQ(context.variables.count("x"), 1);
-  EXPECT_EQ(context.variables.at("x"), 9);
+  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_value, nullptr);
+  EXPECT_EQ(*x_value, 9);
 }
 
 TEST(InterpreterTests, ExecutesIfWithoutElseAndSkipsBodyWhenFalse) {
@@ -85,7 +98,9 @@ TEST(InterpreterTests, ExecutesIfWithoutElseAndSkipsBodyWhenFalse) {
 
   EXPECT_EQ(output.str(), "3\n");
   ASSERT_EQ(context.variables.count("x"), 1);
-  EXPECT_EQ(context.variables.at("x"), 3);
+  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_value, nullptr);
+  EXPECT_EQ(*x_value, 3);
 }
 
 TEST(InterpreterTests, ExecutesIfWithoutElseWhenConditionIsTrue) {
@@ -101,7 +116,9 @@ TEST(InterpreterTests, ExecutesIfWithoutElseWhenConditionIsTrue) {
 
   EXPECT_EQ(output.str(), "7\n8\n");
   ASSERT_EQ(context.variables.count("x"), 1);
-  EXPECT_EQ(context.variables.at("x"), 8);
+  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_value, nullptr);
+  EXPECT_EQ(*x_value, 8);
 }
 
 TEST(InterpreterTests, EvaluatesArithmeticExpressionsWithPrecedence) {
@@ -122,9 +139,83 @@ TEST(InterpreterTests, EvaluatesArithmeticExpressionsWithPrecedence) {
 
   EXPECT_EQ(output.str(), "16\n26\n-9\n222\n");
   ASSERT_EQ(context.variables.count("x"), 1);
-  EXPECT_EQ(context.variables.at("x"), -9);
+  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_value, nullptr);
+  EXPECT_EQ(*x_value, -9);
   ASSERT_EQ(context.variables.count("y"), 1);
-  EXPECT_EQ(context.variables.at("y"), 3);
+  const auto* y_value = std::get_if<int>(&context.variables.at("y"));
+  ASSERT_NE(y_value, nullptr);
+  EXPECT_EQ(*y_value, 3);
+}
+
+TEST(InterpreterTests, EvaluatesBooleanLogic) {
+  const std::string source =
+      "var a bool = true;\n"
+      "var b bool = false;\n"
+      "if a && !b || false { print(true); } else { print(false); }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+
+  EXPECT_EQ(output.str(), "true\n");
+  ASSERT_EQ(context.variables.count("a"), 1);
+  const auto* a_value = std::get_if<bool>(&context.variables.at("a"));
+  ASSERT_NE(a_value, nullptr);
+  EXPECT_TRUE(*a_value);
+  ASSERT_EQ(context.variables.count("b"), 1);
+  const auto* b_value = std::get_if<bool>(&context.variables.at("b"));
+  ASSERT_NE(b_value, nullptr);
+  EXPECT_FALSE(*b_value);
+}
+
+TEST(InterpreterTests, SupportsBoolAssignmentFromIdentifier) {
+  const std::string source =
+      "var a bool = true;\n"
+      "var b bool;\n"
+      "b = a;\n"
+      "print(b);\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+
+  EXPECT_EQ(output.str(), "true\n");
+  ASSERT_EQ(context.variables.count("a"), 1);
+  const auto* a_value = std::get_if<bool>(&context.variables.at("a"));
+  ASSERT_NE(a_value, nullptr);
+  EXPECT_TRUE(*a_value);
+  ASSERT_EQ(context.variables.count("b"), 1);
+  const auto* b_value = std::get_if<bool>(&context.variables.at("b"));
+  ASSERT_NE(b_value, nullptr);
+  EXPECT_TRUE(*b_value);
+}
+
+TEST(InterpreterTests, ThrowsOnFunctionCallStatement) {
+  const std::string source = "foo();\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
+}
+
+TEST(InterpreterTests, ThrowsOnFunctionCallInsideArithmeticExpression) {
+  const std::string source =
+      "var x int;\n"
+      "x = foo() + 1;\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
+}
+
+TEST(InterpreterTests, ThrowsOnFunctionCallInsideBoolInitializer) {
+  const std::string source =
+      "var flag bool = foo();\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
 }
 
 TEST(InterpreterTests, ThrowsOnPrintOfUnknownVariable) {
@@ -154,24 +245,21 @@ TEST(InterpreterTests, ThrowsOnDivisionByZero) {
 }
 
 TEST(InterpreterTests, DivisionLeftRecursionTest) {
-  const std::string source =
-      "print(100 / 5 / 2);\n";
+  const std::string source = "print(100 / 5 / 2);\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
-  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  Parsing::Interpret(program, output);
   EXPECT_EQ(output.str(), "10\n");
 }
 
-TEST(InterpreterTests, SubstractionLeftRecursionTest) {
-  const std::string source =
-      "print(100 - 5 - 2);\n";
+TEST(InterpreterTests, SubtractionLeftRecursionTest) {
+  const std::string source = "print(100 - 5 - 2);\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
-  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  Parsing::Interpret(program, output);
   EXPECT_EQ(output.str(), "93\n");
 }
-
 
 }  // namespace

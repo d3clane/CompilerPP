@@ -49,17 +49,26 @@ IDENT_BODY [A-Za-z0-9_]
 
 "var"           { PushToken(Tokenizing::VarKeyword{}); }
 "int"           { PushToken(Tokenizing::IntKeyword{}); }
+"bool"          { PushToken(Tokenizing::BoolKeyword{}); }
+"mutable"       { PushToken(Tokenizing::MutableKeyword{}); }
+"func"          { PushToken(Tokenizing::FuncKeyword{}); }
+"return"        { PushToken(Tokenizing::ReturnKeyword{}); }
+"true"          { PushToken(Tokenizing::TrueKeyword{}); }
+"false"         { PushToken(Tokenizing::FalseKeyword{}); }
 "print"         { PushToken(Tokenizing::PrintKeyword{}); }
 "if"            { PushToken(Tokenizing::IfKeyword{}); }
 "else"          { PushToken(Tokenizing::ElseKeyword{}); }
 
 "=="            { PushToken(Tokenizing::EqualEqual{}); }
 "!="            { PushToken(Tokenizing::NotEqual{}); }
+"&&"            { PushToken(Tokenizing::AndAnd{}); }
+"||"            { PushToken(Tokenizing::OrOr{}); }
 "<="            { PushToken(Tokenizing::LessEqual{}); }
 ">="            { PushToken(Tokenizing::GreaterEqual{}); }
 "<"             { PushToken(Tokenizing::Less{}); }
 ">"             { PushToken(Tokenizing::Greater{}); }
 "="             { PushToken(Tokenizing::Assign{}); }
+"!"             { PushToken(Tokenizing::Not{}); }
 "+"             { PushToken(Tokenizing::Plus{}); }
 "-"             { PushToken(Tokenizing::Minus{}); }
 "*"             { PushToken(Tokenizing::Star{}); }
@@ -67,6 +76,8 @@ IDENT_BODY [A-Za-z0-9_]
 "%"             { PushToken(Tokenizing::Percent{}); }
 
 ";"             { PushToken(Tokenizing::Semicolon{}); }
+","             { PushToken(Tokenizing::Comma{}); }
+":"             { PushToken(Tokenizing::Colon{}); }
 "("             { PushToken(Tokenizing::LeftParen{}); }
 ")"             { PushToken(Tokenizing::RightParen{}); }
 "{"             { PushToken(Tokenizing::LeftBrace{}); }
