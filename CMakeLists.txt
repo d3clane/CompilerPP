@@ -33,6 +33,7 @@ add_library(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Printer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/PrinterAST.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Interpreter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/SymbolTable.cpp"
 )
 
 target_include_directories(
@@ -66,6 +67,7 @@ add_executable(
   compiler_frontend_tests
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/ParserTreeTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/InterpreterTests.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/SymbolTableTests.cpp"
 )
 
 target_link_libraries(

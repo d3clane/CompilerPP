@@ -1,6 +1,7 @@
 #include "Parsing/PrinterAST.hpp"
 
 #include <cassert>
+#include <type_traits>
 
 #include "Utils/Overload.hpp"
 
@@ -17,11 +18,92 @@ void PrintElseTailTree(const ElseTail& else_tail, int indent, std::string& outpu
 void PrintIfStatementTree(const IfStatement& if_statement, int indent, std::string& output);
 void PrintStatementTree(const Statement& statement, int indent, std::string& output);
 
+template <typename T>
+inline constexpr bool kAlwaysFalse = false;
+
+template <typename T>
+constexpr const char* GetExpressionNodeName() {
+  if constexpr (std::same_as<T, UnaryPlusExpression>) {
+    return "UnaryPlusExpression";
+  } else if constexpr (std::same_as<T, UnaryMinusExpression>) {
+    return "UnaryMinusExpression";
+  } else if constexpr (std::same_as<T, UnaryNotExpression>) {
+    return "UnaryNotExpression";
+  } else if constexpr (std::same_as<T, AddExpression>) {
+    return "AddExpression";
+  } else if constexpr (std::same_as<T, SubtractExpression>) {
+    return "SubtractExpression";
+  } else if constexpr (std::same_as<T, MultiplyExpression>) {
+    return "MultiplyExpression";
+  } else if constexpr (std::same_as<T, DivideExpression>) {
+    return "DivideExpression";
+  } else if constexpr (std::same_as<T, ModuloExpression>) {
+    return "ModuloExpression";
+  } else if constexpr (std::same_as<T, LogicalAndExpression>) {
+    return "LogicalAndExpression";
+  } else if constexpr (std::same_as<T, LogicalOrExpression>) {
+    return "LogicalOrExpression";
+  } else if constexpr (std::same_as<T, EqualExpression>) {
+    return "EqualExpression";
+  } else if constexpr (std::same_as<T, NotEqualExpression>) {
+    return "NotEqualExpression";
+  } else if constexpr (std::same_as<T, LessExpression>) {
+    return "LessExpression";
+  } else if constexpr (std::same_as<T, GreaterExpression>) {
+    return "GreaterExpression";
+  } else if constexpr (std::same_as<T, LessEqualExpression>) {
+    return "LessEqualExpression";
+  } else if constexpr (std::same_as<T, GreaterEqualExpression>) {
+    return "GreaterEqualExpression";
+  } else {
+    static_assert(kAlwaysFalse<T>, "Unsupported expression node");
+  }
+}
+
+template <UnaryExpressionNode T>
+void PrintUnaryExpressionTree(
+    const T& unary_expression,
+    int indent,
+    std::string& output) {
+  assert(unary_expression.operand != nullptr);
+  AppendLine(output, indent, std::string(GetExpressionNodeName<T>()) + ":");
+  PrintExpressionTree(*unary_expression.operand, indent + 1, output);
+}
+
+template <BinaryExpressionNode T>
+void PrintBinaryExpressionTree(
+    const T& binary_expression,
+    int indent,
+    std::string& output) {
+  assert(binary_expression.left != nullptr);
+  assert(binary_expression.right != nullptr);
+  AppendLine(output, indent, std::string(GetExpressionNodeName<T>()) + ":");
+  PrintExpressionTree(*binary_expression.left, indent + 1, output);
+  PrintExpressionTree(*binary_expression.right, indent + 1, output);
+}
+
 std::string PrintType(const Type& type) {
   return std::visit(
       Utils::Overload{
           [](const IntType&) -> std::string { return "int"; },
-          [](const BoolType&) -> std::string { return "bool"; }},
+          [](const BoolType&) -> std::string { return "bool"; },
+          [](const std::shared_ptr<FuncType>& func_type) -> std::string {
+            assert(func_type != nullptr);
+            std::string result = "func(";
+            for (size_t i = 0; i < func_type->parameter_types.size(); ++i) {
+              result += PrintType(func_type->parameter_types[i]);
+              if (i + 1 < func_type->parameter_types.size()) {
+                result += ", ";
+              }
+            }
+            result += ")";
+
+            if (func_type->return_type.has_value()) {
+              result += " -> " + PrintType(*func_type->return_type);
+            }
+
+            return result;
+          }},
       type);
 }
 
@@ -78,111 +160,11 @@ void PrintExpressionTree(const Expression& expression, int indent, std::string& 
             AppendLine(output, indent, "FunctionCallExpression:");
             PrintFunctionCallTree(function_call, indent + 1, output);
           },
-          [&output, indent](const UnaryPlusExpression& unary_expression) {
-            assert(unary_expression.operand != nullptr);
-            AppendLine(output, indent, "UnaryPlusExpression:");
-            PrintExpressionTree(*unary_expression.operand, indent + 1, output);
+          [&output, indent]<UnaryExpressionNode Node>(const Node& node) {
+            PrintUnaryExpressionTree(node, indent, output);
           },
-          [&output, indent](const UnaryMinusExpression& unary_expression) {
-            assert(unary_expression.operand != nullptr);
-            AppendLine(output, indent, "UnaryMinusExpression:");
-            PrintExpressionTree(*unary_expression.operand, indent + 1, output);
-          },
-          [&output, indent](const UnaryNotExpression& unary_expression) {
-            assert(unary_expression.operand != nullptr);
-            AppendLine(output, indent, "UnaryNotExpression:");
-            PrintExpressionTree(*unary_expression.operand, indent + 1, output);
-          },
-          [&output, indent](const AddExpression& add_expression) {
-            assert(add_expression.left != nullptr);
-            assert(add_expression.right != nullptr);
-            AppendLine(output, indent, "AddExpression:");
-            PrintExpressionTree(*add_expression.left, indent + 1, output);
-            PrintExpressionTree(*add_expression.right, indent + 1, output);
-          },
-          [&output, indent](const SubtractExpression& subtract_expression) {
-            assert(subtract_expression.left != nullptr);
-            assert(subtract_expression.right != nullptr);
-            AppendLine(output, indent, "SubtractExpression:");
-            PrintExpressionTree(*subtract_expression.left, indent + 1, output);
-            PrintExpressionTree(*subtract_expression.right, indent + 1, output);
-          },
-          [&output, indent](const MultiplyExpression& multiply_expression) {
-            assert(multiply_expression.left != nullptr);
-            assert(multiply_expression.right != nullptr);
-            AppendLine(output, indent, "MultiplyExpression:");
-            PrintExpressionTree(*multiply_expression.left, indent + 1, output);
-            PrintExpressionTree(*multiply_expression.right, indent + 1, output);
-          },
-          [&output, indent](const DivideExpression& divide_expression) {
-            assert(divide_expression.left != nullptr);
-            assert(divide_expression.right != nullptr);
-            AppendLine(output, indent, "DivideExpression:");
-            PrintExpressionTree(*divide_expression.left, indent + 1, output);
-            PrintExpressionTree(*divide_expression.right, indent + 1, output);
-          },
-          [&output, indent](const ModuloExpression& modulo_expression) {
-            assert(modulo_expression.left != nullptr);
-            assert(modulo_expression.right != nullptr);
-            AppendLine(output, indent, "ModuloExpression:");
-            PrintExpressionTree(*modulo_expression.left, indent + 1, output);
-            PrintExpressionTree(*modulo_expression.right, indent + 1, output);
-          },
-          [&output, indent](const LogicalAndExpression& and_expression) {
-            assert(and_expression.left != nullptr);
-            assert(and_expression.right != nullptr);
-            AppendLine(output, indent, "LogicalAndExpression:");
-            PrintExpressionTree(*and_expression.left, indent + 1, output);
-            PrintExpressionTree(*and_expression.right, indent + 1, output);
-          },
-          [&output, indent](const LogicalOrExpression& or_expression) {
-            assert(or_expression.left != nullptr);
-            assert(or_expression.right != nullptr);
-            AppendLine(output, indent, "LogicalOrExpression:");
-            PrintExpressionTree(*or_expression.left, indent + 1, output);
-            PrintExpressionTree(*or_expression.right, indent + 1, output);
-          },
-          [&output, indent](const EqualExpression& equal_expression) {
-            assert(equal_expression.left != nullptr);
-            assert(equal_expression.right != nullptr);
-            AppendLine(output, indent, "EqualExpression:");
-            PrintExpressionTree(*equal_expression.left, indent + 1, output);
-            PrintExpressionTree(*equal_expression.right, indent + 1, output);
-          },
-          [&output, indent](const NotEqualExpression& not_equal_expression) {
-            assert(not_equal_expression.left != nullptr);
-            assert(not_equal_expression.right != nullptr);
-            AppendLine(output, indent, "NotEqualExpression:");
-            PrintExpressionTree(*not_equal_expression.left, indent + 1, output);
-            PrintExpressionTree(*not_equal_expression.right, indent + 1, output);
-          },
-          [&output, indent](const LessExpression& less_expression) {
-            assert(less_expression.left != nullptr);
-            assert(less_expression.right != nullptr);
-            AppendLine(output, indent, "LessExpression:");
-            PrintExpressionTree(*less_expression.left, indent + 1, output);
-            PrintExpressionTree(*less_expression.right, indent + 1, output);
-          },
-          [&output, indent](const GreaterExpression& greater_expression) {
-            assert(greater_expression.left != nullptr);
-            assert(greater_expression.right != nullptr);
-            AppendLine(output, indent, "GreaterExpression:");
-            PrintExpressionTree(*greater_expression.left, indent + 1, output);
-            PrintExpressionTree(*greater_expression.right, indent + 1, output);
-          },
-          [&output, indent](const LessEqualExpression& less_equal_expression) {
-            assert(less_equal_expression.left != nullptr);
-            assert(less_equal_expression.right != nullptr);
-            AppendLine(output, indent, "LessEqualExpression:");
-            PrintExpressionTree(*less_equal_expression.left, indent + 1, output);
-            PrintExpressionTree(*less_equal_expression.right, indent + 1, output);
-          },
-          [&output, indent](const GreaterEqualExpression& greater_equal_expression) {
-            assert(greater_equal_expression.left != nullptr);
-            assert(greater_equal_expression.right != nullptr);
-            AppendLine(output, indent, "GreaterEqualExpression:");
-            PrintExpressionTree(*greater_equal_expression.left, indent + 1, output);
-            PrintExpressionTree(*greater_equal_expression.right, indent + 1, output);
+          [&output, indent]<BinaryExpressionNode Node>(const Node& node) {
+            PrintBinaryExpressionTree(node, indent, output);
           }},
       expression.value);
 }

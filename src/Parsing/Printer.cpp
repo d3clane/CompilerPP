@@ -1,6 +1,7 @@
 #include "Parsing/Printer.hpp"
 
 #include <cassert>
+#include <type_traits>
 
 #include "Utils/Overload.hpp"
 
@@ -27,11 +28,109 @@ constexpr int kMultiplicativePrecedence = 6;
 constexpr int kUnaryPrecedence = 7;
 constexpr int kAtomPrecedence = 8;
 
+template <typename T>
+inline constexpr bool kAlwaysFalse = false;
+
+template <UnaryExpressionNode T>
+constexpr const char* GetUnaryOperatorToken() {
+  if constexpr (std::same_as<T, UnaryPlusExpression>) {
+    return "+";
+  } else if constexpr (std::same_as<T, UnaryMinusExpression>) {
+    return "-";
+  } else if constexpr (std::same_as<T, UnaryNotExpression>) {
+    return "!";
+  } else {
+    static_assert(kAlwaysFalse<T>, "Unsupported unary expression node");
+  }
+}
+
+template <BinaryExpressionNode T>
+constexpr const char* GetBinaryOperatorToken() {
+  if constexpr (std::same_as<T, AddExpression>) {
+    return "+";
+  } else if constexpr (std::same_as<T, SubtractExpression>) {
+    return "-";
+  } else if constexpr (std::same_as<T, MultiplyExpression>) {
+    return "*";
+  } else if constexpr (std::same_as<T, DivideExpression>) {
+    return "/";
+  } else if constexpr (std::same_as<T, ModuloExpression>) {
+    return "%";
+  } else if constexpr (std::same_as<T, LogicalAndExpression>) {
+    return "&&";
+  } else if constexpr (std::same_as<T, LogicalOrExpression>) {
+    return "||";
+  } else if constexpr (std::same_as<T, EqualExpression>) {
+    return "==";
+  } else if constexpr (std::same_as<T, NotEqualExpression>) {
+    return "!=";
+  } else if constexpr (std::same_as<T, LessExpression>) {
+    return "<";
+  } else if constexpr (std::same_as<T, GreaterExpression>) {
+    return ">";
+  } else if constexpr (std::same_as<T, LessEqualExpression>) {
+    return "<=";
+  } else if constexpr (std::same_as<T, GreaterEqualExpression>) {
+    return ">=";
+  } else {
+    static_assert(kAlwaysFalse<T>, "Unsupported binary expression node");
+  }
+}
+
+template <BinaryExpressionNode T>
+constexpr int GetBinaryPrecedence() {
+  if constexpr (
+      std::same_as<T, AddExpression> ||
+      std::same_as<T, SubtractExpression>) {
+    return kAdditivePrecedence;
+  } else if constexpr (
+      std::same_as<T, MultiplyExpression> ||
+      std::same_as<T, DivideExpression> ||
+      std::same_as<T, ModuloExpression>) {
+    return kMultiplicativePrecedence;
+  } else if constexpr (
+      std::same_as<T, LogicalAndExpression>) {
+    return kLogicalAndPrecedence;
+  } else if constexpr (
+      std::same_as<T, LogicalOrExpression>) {
+    return kLogicalOrPrecedence;
+  } else if constexpr (
+      std::same_as<T, EqualExpression> ||
+      std::same_as<T, NotEqualExpression>) {
+    return kEqualityPrecedence;
+  } else if constexpr (
+      std::same_as<T, LessExpression> ||
+      std::same_as<T, GreaterExpression> ||
+      std::same_as<T, LessEqualExpression> ||
+      std::same_as<T, GreaterEqualExpression>) {
+    return kRelationalPrecedence;
+  } else {
+    static_assert(kAlwaysFalse<T>, "Unsupported binary expression node");
+  }
+}
+
 std::string PrintType(const Type& type) {
   return std::visit(
       Utils::Overload{
           [](const IntType&) -> std::string { return "int"; },
-          [](const BoolType&) -> std::string { return "bool"; }},
+          [](const BoolType&) -> std::string { return "bool"; },
+          [](const std::shared_ptr<FuncType>& func_type) -> std::string {
+            assert(func_type != nullptr);
+            std::string result = "func(";
+            for (size_t i = 0; i < func_type->parameter_types.size(); ++i) {
+              result += PrintType(func_type->parameter_types[i]);
+              if (i + 1 < func_type->parameter_types.size()) {
+                result += ", ";
+              }
+            }
+            result += ")";
+
+            if (func_type->return_type.has_value()) {
+              result += " -> " + PrintType(*func_type->return_type);
+            }
+
+            return result;
+          }},
       type);
 }
 
@@ -41,30 +140,18 @@ int GetPrecedence(const Expression& expression) {
           [](const IdentifierExpression&) -> int { return kAtomPrecedence; },
           [](const LiteralExpression&) -> int { return kAtomPrecedence; },
           [](const FunctionCall&) -> int { return kAtomPrecedence; },
-          [](const UnaryPlusExpression&) -> int { return kUnaryPrecedence; },
-          [](const UnaryMinusExpression&) -> int { return kUnaryPrecedence; },
-          [](const UnaryNotExpression&) -> int { return kUnaryPrecedence; },
-          [](const AddExpression&) -> int { return kAdditivePrecedence; },
-          [](const SubtractExpression&) -> int { return kAdditivePrecedence; },
-          [](const MultiplyExpression&) -> int { return kMultiplicativePrecedence; },
-          [](const DivideExpression&) -> int { return kMultiplicativePrecedence; },
-          [](const ModuloExpression&) -> int { return kMultiplicativePrecedence; },
-          [](const LogicalAndExpression&) -> int { return kLogicalAndPrecedence; },
-          [](const LogicalOrExpression&) -> int { return kLogicalOrPrecedence; },
-          [](const EqualExpression&) -> int { return kEqualityPrecedence; },
-          [](const NotEqualExpression&) -> int { return kEqualityPrecedence; },
-          [](const LessExpression&) -> int { return kRelationalPrecedence; },
-          [](const GreaterExpression&) -> int { return kRelationalPrecedence; },
-          [](const LessEqualExpression&) -> int { return kRelationalPrecedence; },
-          [](const GreaterEqualExpression&) -> int { return kRelationalPrecedence; }},
+          []<UnaryExpressionNode Node>(const Node&) -> int { return kUnaryPrecedence; },
+          []<BinaryExpressionNode Node>(const Node&) -> int {
+            return GetBinaryPrecedence<Node>();
+          }},
       expression.value);
 }
 
 bool IsBinaryExpression(const Expression& expression) {
   return std::visit(
-      [](const auto& node) -> bool {
-        return BinaryExpressionNode<decltype(node)>;
-      },
+      Utils::Overload{
+          []<BinaryExpressionNode Node>(const Node&) -> bool { return true; },
+          []<typename Node>(const Node&) -> bool { return false; }},
       expression.value);
 }
 
@@ -143,143 +230,22 @@ std::string PrintExpressionWithContext(
           [](const FunctionCall& function_call) -> std::string {
             return PrintFunctionCall(function_call);
           },
-          [](const UnaryPlusExpression& unary_expression) -> std::string {
-            assert(unary_expression.operand != nullptr);
-            return "+" + PrintExpressionWithContext(
-                             *unary_expression.operand,
-                             kUnaryPrecedence,
-                             true);
+          []<UnaryExpressionNode Node>(const Node& node) -> std::string {
+            assert(node.operand != nullptr);
+            return std::string(GetUnaryOperatorToken<Node>()) +
+                   PrintExpressionWithContext(
+                       *node.operand,
+                       kUnaryPrecedence,
+                       true);
           },
-          [](const UnaryMinusExpression& unary_expression) -> std::string {
-            assert(unary_expression.operand != nullptr);
-            return "-" + PrintExpressionWithContext(
-                             *unary_expression.operand,
-                             kUnaryPrecedence,
-                             true);
-          },
-          [](const UnaryNotExpression& unary_expression) -> std::string {
-            assert(unary_expression.operand != nullptr);
-            return "!" + PrintExpressionWithContext(
-                             *unary_expression.operand,
-                             kUnaryPrecedence,
-                             true);
-          },
-          [](const AddExpression& add_expression) -> std::string {
-            assert(add_expression.left != nullptr);
-            assert(add_expression.right != nullptr);
+          []<BinaryExpressionNode Node>(const Node& node) -> std::string {
+            assert(node.left != nullptr);
+            assert(node.right != nullptr);
             return PrintBinaryExpression(
-                *add_expression.left,
-                "+",
-                *add_expression.right,
-                kAdditivePrecedence);
-          },
-          [](const SubtractExpression& subtract_expression) -> std::string {
-            assert(subtract_expression.left != nullptr);
-            assert(subtract_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *subtract_expression.left,
-                "-",
-                *subtract_expression.right,
-                kAdditivePrecedence);
-          },
-          [](const MultiplyExpression& multiply_expression) -> std::string {
-            assert(multiply_expression.left != nullptr);
-            assert(multiply_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *multiply_expression.left,
-                "*",
-                *multiply_expression.right,
-                kMultiplicativePrecedence);
-          },
-          [](const DivideExpression& divide_expression) -> std::string {
-            assert(divide_expression.left != nullptr);
-            assert(divide_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *divide_expression.left,
-                "/",
-                *divide_expression.right,
-                kMultiplicativePrecedence);
-          },
-          [](const ModuloExpression& modulo_expression) -> std::string {
-            assert(modulo_expression.left != nullptr);
-            assert(modulo_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *modulo_expression.left,
-                "%",
-                *modulo_expression.right,
-                kMultiplicativePrecedence);
-          },
-          [](const LogicalAndExpression& and_expression) -> std::string {
-            assert(and_expression.left != nullptr);
-            assert(and_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *and_expression.left,
-                "&&",
-                *and_expression.right,
-                kLogicalAndPrecedence);
-          },
-          [](const LogicalOrExpression& or_expression) -> std::string {
-            assert(or_expression.left != nullptr);
-            assert(or_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *or_expression.left,
-                "||",
-                *or_expression.right,
-                kLogicalOrPrecedence);
-          },
-          [](const EqualExpression& equal_expression) -> std::string {
-            assert(equal_expression.left != nullptr);
-            assert(equal_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *equal_expression.left,
-                "==",
-                *equal_expression.right,
-                kEqualityPrecedence);
-          },
-          [](const NotEqualExpression& not_equal_expression) -> std::string {
-            assert(not_equal_expression.left != nullptr);
-            assert(not_equal_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *not_equal_expression.left,
-                "!=",
-                *not_equal_expression.right,
-                kEqualityPrecedence);
-          },
-          [](const LessExpression& less_expression) -> std::string {
-            assert(less_expression.left != nullptr);
-            assert(less_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *less_expression.left,
-                "<",
-                *less_expression.right,
-                kRelationalPrecedence);
-          },
-          [](const GreaterExpression& greater_expression) -> std::string {
-            assert(greater_expression.left != nullptr);
-            assert(greater_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *greater_expression.left,
-                ">",
-                *greater_expression.right,
-                kRelationalPrecedence);
-          },
-          [](const LessEqualExpression& less_equal_expression) -> std::string {
-            assert(less_equal_expression.left != nullptr);
-            assert(less_equal_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *less_equal_expression.left,
-                "<=",
-                *less_equal_expression.right,
-                kRelationalPrecedence);
-          },
-          [](const GreaterEqualExpression& greater_equal_expression) -> std::string {
-            assert(greater_equal_expression.left != nullptr);
-            assert(greater_equal_expression.right != nullptr);
-            return PrintBinaryExpression(
-                *greater_equal_expression.left,
-                ">=",
-                *greater_equal_expression.right,
-                kRelationalPrecedence);
+                *node.left,
+                GetBinaryOperatorToken<Node>(),
+                *node.right,
+                GetBinaryPrecedence<Node>());
           }},
       expression.value);
 

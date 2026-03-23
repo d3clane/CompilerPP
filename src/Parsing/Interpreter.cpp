@@ -3,6 +3,7 @@
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
+#include <type_traits>
 #include <variant>
 
 #include "Utils/Overload.hpp"
@@ -45,6 +46,92 @@ bool EvaluateEquality(const RuntimeValue& left, const RuntimeValue& right, bool 
 
 RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterContext& context);
 
+template <typename T>
+inline constexpr bool kAlwaysFalse = false;
+
+template <UnaryExpressionNode T>
+RuntimeValue EvaluateUnaryExpression(
+    const T& unary_expression,
+    const InterpreterContext& context) {
+  assert(unary_expression.operand != nullptr);
+  const RuntimeValue operand_value = EvaluateExpression(*unary_expression.operand, context);
+
+  if constexpr (std::same_as<T, UnaryPlusExpression>) {
+    return RuntimeValue{RequireInt(operand_value, "Unary +")};
+  } else if constexpr (std::same_as<T, UnaryMinusExpression>) {
+    return RuntimeValue{-RequireInt(operand_value, "Unary -")};
+  } else if constexpr (std::same_as<T, UnaryNotExpression>) {
+    return RuntimeValue{!RequireBool(operand_value, "Unary !")};
+  } else {
+    static_assert(kAlwaysFalse<T>, "Unsupported unary expression node");
+  }
+}
+
+template <BinaryExpressionNode T>
+RuntimeValue EvaluateBinaryExpression(
+    const T& binary_expression,
+    const InterpreterContext& context) {
+  assert(binary_expression.left != nullptr);
+  assert(binary_expression.right != nullptr);
+
+  if constexpr (std::same_as<T, LogicalAndExpression>) {
+    const RuntimeValue left_value = EvaluateExpression(*binary_expression.left, context);
+    if (!RequireBool(left_value, "&&")) {
+      return RuntimeValue{false};
+    }
+
+    const RuntimeValue right_value = EvaluateExpression(*binary_expression.right, context);
+    return RuntimeValue{RequireBool(right_value, "&&")};
+  } else if constexpr (std::same_as<T, LogicalOrExpression>) {
+    const RuntimeValue left_value = EvaluateExpression(*binary_expression.left, context);
+    if (RequireBool(left_value, "||")) {
+      return RuntimeValue{true};
+    }
+
+    const RuntimeValue right_value = EvaluateExpression(*binary_expression.right, context);
+    return RuntimeValue{RequireBool(right_value, "||")};
+  } else {
+    const RuntimeValue left_value = EvaluateExpression(*binary_expression.left, context);
+    const RuntimeValue right_value = EvaluateExpression(*binary_expression.right, context);
+
+    if constexpr (std::same_as<T, AddExpression>) {
+      return RuntimeValue{RequireInt(left_value, "+") + RequireInt(right_value, "+")};
+    } else if constexpr (std::same_as<T, SubtractExpression>) {
+      return RuntimeValue{RequireInt(left_value, "-") - RequireInt(right_value, "-")};
+    } else if constexpr (std::same_as<T, MultiplyExpression>) {
+      return RuntimeValue{RequireInt(left_value, "*") * RequireInt(right_value, "*")};
+    } else if constexpr (std::same_as<T, DivideExpression>) {
+      const int divisor = RequireInt(right_value, "/");
+      if (divisor == 0) {
+        throw std::runtime_error("Division by zero");
+      }
+
+      return RuntimeValue{RequireInt(left_value, "/") / divisor};
+    } else if constexpr (std::same_as<T, ModuloExpression>) {
+      const int divisor = RequireInt(right_value, "%");
+      if (divisor == 0) {
+        throw std::runtime_error("Modulo by zero");
+      }
+
+      return RuntimeValue{RequireInt(left_value, "%") % divisor};
+    } else if constexpr (std::same_as<T, EqualExpression>) {
+      return RuntimeValue{EvaluateEquality(left_value, right_value, false)};
+    } else if constexpr (std::same_as<T, NotEqualExpression>) {
+      return RuntimeValue{EvaluateEquality(left_value, right_value, true)};
+    } else if constexpr (std::same_as<T, LessExpression>) {
+      return RuntimeValue{RequireInt(left_value, "<") < RequireInt(right_value, "<")};
+    } else if constexpr (std::same_as<T, GreaterExpression>) {
+      return RuntimeValue{RequireInt(left_value, ">") > RequireInt(right_value, ">")};
+    } else if constexpr (std::same_as<T, LessEqualExpression>) {
+      return RuntimeValue{RequireInt(left_value, "<=") <= RequireInt(right_value, "<=")};
+    } else if constexpr (std::same_as<T, GreaterEqualExpression>) {
+      return RuntimeValue{RequireInt(left_value, ">=") >= RequireInt(right_value, ">=")};
+    } else {
+      static_assert(kAlwaysFalse<T>, "Unsupported binary expression node");
+    }
+  }
+}
+
 RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterContext& context) {
   return std::visit(
       Utils::Overload{
@@ -59,142 +146,11 @@ RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterC
 
             throw std::runtime_error("Unknown variable: " + identifier.name);
           },
-          [&context](const UnaryPlusExpression& unary_expression) -> RuntimeValue {
-            assert(unary_expression.operand != nullptr);
-            const RuntimeValue operand_value = EvaluateExpression(*unary_expression.operand, context);
-            return RuntimeValue{RequireInt(operand_value, "Unary +")};
+          [&context]<UnaryExpressionNode Node>(const Node& expression_node) -> RuntimeValue {
+            return EvaluateUnaryExpression(expression_node, context);
           },
-          [&context](const UnaryMinusExpression& unary_expression) -> RuntimeValue {
-            assert(unary_expression.operand != nullptr);
-            const RuntimeValue operand_value = EvaluateExpression(*unary_expression.operand, context);
-            return RuntimeValue{-RequireInt(operand_value, "Unary -")};
-          },
-          [&context](const UnaryNotExpression& unary_expression) -> RuntimeValue {
-            assert(unary_expression.operand != nullptr);
-            const RuntimeValue operand_value = EvaluateExpression(*unary_expression.operand, context);
-            return RuntimeValue{!RequireBool(operand_value, "Unary !")};
-          },
-          [&context](const AddExpression& add_expression) -> RuntimeValue {
-            assert(add_expression.left != nullptr);
-            assert(add_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*add_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*add_expression.right, context);
-            return RuntimeValue{RequireInt(left_value, "+") + RequireInt(right_value, "+")};
-          },
-          [&context](const SubtractExpression& subtract_expression) -> RuntimeValue {
-            assert(subtract_expression.left != nullptr);
-            assert(subtract_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*subtract_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*subtract_expression.right, context);
-            return RuntimeValue{RequireInt(left_value, "-") - RequireInt(right_value, "-")};
-          },
-          [&context](const MultiplyExpression& multiply_expression) -> RuntimeValue {
-            assert(multiply_expression.left != nullptr);
-            assert(multiply_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*multiply_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*multiply_expression.right, context);
-            return RuntimeValue{RequireInt(left_value, "*") * RequireInt(right_value, "*")};
-          },
-          [&context](const DivideExpression& divide_expression) -> RuntimeValue {
-            assert(divide_expression.left != nullptr);
-            assert(divide_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*divide_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*divide_expression.right, context);
-            const int divisor = RequireInt(right_value, "/");
-            if (divisor == 0) {
-              throw std::runtime_error("Division by zero");
-            }
-
-            return RuntimeValue{RequireInt(left_value, "/") / divisor};
-          },
-          [&context](const ModuloExpression& modulo_expression) -> RuntimeValue {
-            assert(modulo_expression.left != nullptr);
-            assert(modulo_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*modulo_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*modulo_expression.right, context);
-            const int divisor = RequireInt(right_value, "%");
-            if (divisor == 0) {
-              throw std::runtime_error("Modulo by zero");
-            }
-
-            return RuntimeValue{RequireInt(left_value, "%") % divisor};
-          },
-          [&context](const LogicalAndExpression& and_expression) -> RuntimeValue {
-            assert(and_expression.left != nullptr);
-            assert(and_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*and_expression.left, context);
-            if (!RequireBool(left_value, "&&")) {
-              return RuntimeValue{false};
-            }
-
-            const RuntimeValue right_value = EvaluateExpression(*and_expression.right, context);
-            return RuntimeValue{RequireBool(right_value, "&&")};
-          },
-          [&context](const LogicalOrExpression& or_expression) -> RuntimeValue {
-            assert(or_expression.left != nullptr);
-            assert(or_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*or_expression.left, context);
-            if (RequireBool(left_value, "||")) {
-              return RuntimeValue{true};
-            }
-
-            const RuntimeValue right_value = EvaluateExpression(*or_expression.right, context);
-            return RuntimeValue{RequireBool(right_value, "||")};
-          },
-          [&context](const EqualExpression& equal_expression) -> RuntimeValue {
-            assert(equal_expression.left != nullptr);
-            assert(equal_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*equal_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*equal_expression.right, context);
-            return RuntimeValue{EvaluateEquality(left_value, right_value, false)};
-          },
-          [&context](const NotEqualExpression& not_equal_expression) -> RuntimeValue {
-            assert(not_equal_expression.left != nullptr);
-            assert(not_equal_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*not_equal_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*not_equal_expression.right, context);
-            return RuntimeValue{EvaluateEquality(left_value, right_value, true)};
-          },
-          [&context](const LessExpression& less_expression) -> RuntimeValue {
-            assert(less_expression.left != nullptr);
-            assert(less_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*less_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*less_expression.right, context);
-            return RuntimeValue{RequireInt(left_value, "<") < RequireInt(right_value, "<")};
-          },
-          [&context](const GreaterExpression& greater_expression) -> RuntimeValue {
-            assert(greater_expression.left != nullptr);
-            assert(greater_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*greater_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*greater_expression.right, context);
-            return RuntimeValue{RequireInt(left_value, ">") > RequireInt(right_value, ">")};
-          },
-          [&context](const LessEqualExpression& less_equal_expression) -> RuntimeValue {
-            assert(less_equal_expression.left != nullptr);
-            assert(less_equal_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*less_equal_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*less_equal_expression.right, context);
-            return RuntimeValue{RequireInt(left_value, "<=") <= RequireInt(right_value, "<=")};
-          },
-          [&context](const GreaterEqualExpression& greater_equal_expression) -> RuntimeValue {
-            assert(greater_equal_expression.left != nullptr);
-            assert(greater_equal_expression.right != nullptr);
-
-            const RuntimeValue left_value = EvaluateExpression(*greater_equal_expression.left, context);
-            const RuntimeValue right_value = EvaluateExpression(*greater_equal_expression.right, context);
-            return RuntimeValue{RequireInt(left_value, ">=") >= RequireInt(right_value, ">=")};
+          [&context]<BinaryExpressionNode Node>(const Node& expression_node) -> RuntimeValue {
+            return EvaluateBinaryExpression(expression_node, context);
           },
           [](const FunctionCall& function_call) -> RuntimeValue {
             ThrowFunctionCallNotSupported(function_call);
