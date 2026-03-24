@@ -110,6 +110,7 @@ std::unique_ptr<CallArgument> MakeNamedArgument(
 %token <int> NUM
 
 %type <List<Statement>> stmt_list
+%type <List<Statement>> decl_stmt_list
 
 %type <Statement> stmt
 %type <Statement> decl_stmt
@@ -157,8 +158,18 @@ std::unique_ptr<CallArgument> MakeNamedArgument(
 %%
 
 program:
-    stmt_list {
+    decl_stmt_list {
       output.top_statements = std::move($1);
+    }
+;
+
+decl_stmt_list:
+    %empty {
+      $$ = List<Statement>();
+    }
+  | decl_stmt_list decl_stmt {
+      $1.push_back(std::make_unique<Statement>(std::move($2)));
+      $$ = std::move($1);
     }
 ;
 

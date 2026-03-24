@@ -29,15 +29,13 @@ const int* GetIntLiteralValue(const std::unique_ptr<Parsing::Expression>& expres
 TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
   const std::string source =
       "var x int;\n"
-      "x = -7 + 2 * 3;\n"
-      "print(x - 1);\n";
+      "func main() { x = -7 + 2 * 3; print(x - 1); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
 
-  ASSERT_EQ(program.top_statements.size(), 3);
+  ASSERT_EQ(program.top_statements.size(), 2);
   ASSERT_NE(program.top_statements[0], nullptr);
   ASSERT_NE(program.top_statements[1], nullptr);
-  ASSERT_NE(program.top_statements[2], nullptr);
 
   const auto* declaration =
       std::get_if<Parsing::DeclarationStatement>(&program.top_statements[0]->value);
@@ -47,8 +45,16 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
   EXPECT_FALSE(declaration->is_mutable);
   EXPECT_EQ(declaration->initializer, nullptr);
 
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+  ASSERT_NE(main_function->body->statements[1], nullptr);
+
   const auto* assignment =
-      std::get_if<Parsing::AssignmentStatement>(&program.top_statements[1]->value);
+      std::get_if<Parsing::AssignmentStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(assignment, nullptr);
   EXPECT_EQ(assignment->variable_name, "x");
   ASSERT_NE(assignment->expr, nullptr);
@@ -85,7 +91,7 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
   EXPECT_EQ(*multiply_right_value, 3);
 
   const auto* print_statement =
-      std::get_if<Parsing::PrintStatement>(&program.top_statements[2]->value);
+      std::get_if<Parsing::PrintStatement>(&main_function->body->statements[1]->value);
   ASSERT_NE(print_statement, nullptr);
   ASSERT_NE(print_statement->expr, nullptr);
 
@@ -109,15 +115,22 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
 TEST(ParserTreeTests, ParsesLogicalIfTree) {
   const std::string source =
       "var flag bool = true;\n"
-      "if !flag || 1 < 2 && flag { print(flag); } else { print(false); }\n";
+      "func main() { if !flag || 1 < 2 && flag { print(flag); } else { print(false); } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 2);
   ASSERT_NE(program.top_statements[1], nullptr);
 
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
   const auto* if_statement =
-      std::get_if<Parsing::IfStatement>(&program.top_statements[1]->value);
+      std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(if_statement, nullptr);
   ASSERT_NE(if_statement->condition, nullptr);
   ASSERT_NE(if_statement->true_block, nullptr);
@@ -155,15 +168,22 @@ TEST(ParserTreeTests, ParsesLogicalIfTree) {
 
 TEST(ParserTreeTests, ParsesComplexIfTreeWithBlocksAndCondition) {
   const std::string source =
-      "if (x + 1) * 2 >= y % 3 { print(x + y); x = x - 1; } else { print(0); }\n";
+      "func main() { if (x + 1) * 2 >= y % 3 { print(x + y); x = x - 1; } else { print(0); } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 1);
   ASSERT_NE(program.top_statements[0], nullptr);
 
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
   const auto* if_statement =
-      std::get_if<Parsing::IfStatement>(&program.top_statements[0]->value);
+      std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(if_statement, nullptr);
   ASSERT_NE(if_statement->condition, nullptr);
   ASSERT_NE(if_statement->true_block, nullptr);
@@ -221,14 +241,21 @@ TEST(ParserTreeTests, ParsesComplexIfTreeWithBlocksAndCondition) {
 
 TEST(ParserTreeTests, ParsesElseIfChainTree) {
   const std::string source =
-      "if x < 0 { print(0); } else if x < 10 { print(1); } else if x < 20 { print(2); } else { print(3); }\n";
+      "func main() { if x < 0 { print(0); } else if x < 10 { print(1); } else if x < 20 { print(2); } else { print(3); } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 1);
   ASSERT_NE(program.top_statements[0], nullptr);
 
-  const auto* first_if = std::get_if<Parsing::IfStatement>(&program.top_statements[0]->value);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
+  const auto* first_if = std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(first_if, nullptr);
   ASSERT_NE(first_if->condition, nullptr);
   ASSERT_NE(first_if->true_block, nullptr);
@@ -279,15 +306,22 @@ TEST(ParserTreeTests, ParsesElseIfChainTree) {
 }
 
 TEST(ParserTreeTests, ParsesIfTreeWithoutElseTail) {
-  const std::string source = "if x > 0 { print(x); }\n";
+  const std::string source = "func main() { if x > 0 { print(x); } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 1);
   ASSERT_NE(program.top_statements[0], nullptr);
 
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
   const auto* if_statement =
-      std::get_if<Parsing::IfStatement>(&program.top_statements[0]->value);
+      std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(if_statement, nullptr);
   ASSERT_NE(if_statement->condition, nullptr);
   ASSERT_NE(if_statement->true_block, nullptr);
@@ -303,7 +337,7 @@ TEST(ParserTreeTests, ParsesIfTreeWithoutElseTail) {
 TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
   const std::string source =
       "func foo(a int, b bool) int { return a; }\n"
-      "foo(x: 1, y: true);\n";
+      "func main() { foo(x: 1, y: true); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
 
@@ -335,8 +369,15 @@ TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
   ASSERT_NE(returned_identifier, nullptr);
   EXPECT_EQ(returned_identifier->name, "a");
 
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
   const auto* expression_statement =
-      std::get_if<Parsing::Expression>(&program.top_statements[1]->value);
+      std::get_if<Parsing::Expression>(&main_function->body->statements[0]->value);
   ASSERT_NE(expression_statement, nullptr);
 
   const auto* function_call = std::get_if<Parsing::FunctionCall>(&expression_statement->value);
@@ -376,8 +417,7 @@ TEST(ParserTreeTests, PrintsProgramInInfixOrder) {
       "var mutable x int = 1 + 2;\n"
       "var flag bool = x > 0 && true;\n"
       "func choose(a int) int { return a; }\n"
-      "if flag { print(x); } else { print(false); }\n"
-      "choose(a: x);\n";
+      "func main() { if flag { print(x); } else { print(false); } choose(a: x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   const std::string printed = Parsing::PrintInfix(program);
@@ -389,7 +429,7 @@ TEST(ParserTreeTests, PrintsProgramAsAstTree) {
   const std::string source =
       "var flag bool = true;\n"
       "func foo(a int) int { return a; }\n"
-      "foo(a: 1);\n";
+      "func main() { foo(a: 1); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   const std::string tree = Parsing::PrintAstTree(program);

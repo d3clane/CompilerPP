@@ -26,9 +26,7 @@ TEST(InterpreterTests, ExecutesIntAndBoolBranches) {
   const std::string source =
       "var x int;\n"
       "var flag bool = true;\n"
-      "x = 5;\n"
-      "if flag && x > 3 { print(x); flag = false; } else { print(0); }\n"
-      "print(flag);\n";
+      "func main() { x = 5; if flag && x > 3 { print(x); flag = false; } else { print(0); } print(flag); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -52,9 +50,7 @@ TEST(InterpreterTests, ExecutesIntAndBoolBranches) {
 TEST(InterpreterTests, ExecutesFalseBranchAndKeepsOrder) {
   const std::string source =
       "var x int;\n"
-      "x = -1;\n"
-      "if x >= 0 { print(1); } else { print(x); x = 2; }\n"
-      "print(x);\n";
+      "func main() { x = -1; if x >= 0 { print(1); } else { print(x); x = 2; } print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -72,9 +68,7 @@ TEST(InterpreterTests, ExecutesFalseBranchAndKeepsOrder) {
 TEST(InterpreterTests, ExecutesElseIfBranch) {
   const std::string source =
       "var x int;\n"
-      "x = 5;\n"
-      "if x < 0 { print(0); } else if x < 10 { print(1); x = 7; } else { print(2); }\n"
-      "print(x);\n";
+      "func main() { x = 5; if x < 0 { print(0); } else if x < 10 { print(1); x = 7; } else { print(2); } print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -92,9 +86,7 @@ TEST(InterpreterTests, ExecutesElseIfBranch) {
 TEST(InterpreterTests, ExecutesMultipleElseIfBranches) {
   const std::string source =
       "var x int;\n"
-      "x = 15;\n"
-      "if x < 0 { print(0); } else if x < 10 { print(1); } else if x < 20 { print(2); x = 9; } else { print(3); }\n"
-      "print(x);\n";
+      "func main() { x = 15; if x < 0 { print(0); } else if x < 10 { print(1); } else if x < 20 { print(2); x = 9; } else { print(3); } print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -112,9 +104,7 @@ TEST(InterpreterTests, ExecutesMultipleElseIfBranches) {
 TEST(InterpreterTests, ExecutesIfWithoutElseAndSkipsBodyWhenFalse) {
   const std::string source =
       "var x int;\n"
-      "x = 3;\n"
-      "if x < 0 { print(999); x = 1; }\n"
-      "print(x);\n";
+      "func main() { x = 3; if x < 0 { print(999); x = 1; } print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -132,9 +122,7 @@ TEST(InterpreterTests, ExecutesIfWithoutElseAndSkipsBodyWhenFalse) {
 TEST(InterpreterTests, ExecutesIfWithoutElseWhenConditionIsTrue) {
   const std::string source =
       "var x int;\n"
-      "x = 3;\n"
-      "if x > 0 { print(7); x = 8; }\n"
-      "print(x);\n";
+      "func main() { x = 3; if x > 0 { print(7); x = 8; } print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -153,13 +141,7 @@ TEST(InterpreterTests, EvaluatesArithmeticExpressionsWithPrecedence) {
   const std::string source =
       "var x int;\n"
       "var y int;\n"
-      "x = 10;\n"
-      "y = 3;\n"
-      "print(x + y * 2);\n"
-      "print((x + y) * 2);\n"
-      "x = -x + y % 2;\n"
-      "if x + 4 == y / 1 { print(111); } else { print(x); }\n"
-      "if -x / 3 == y { print(222); } else { print(x); }\n";
+      "func main() { x = 10; y = 3; print(x + y * 2); print((x + y) * 2); x = -x + y % 2; if x + 4 == y / 1 { print(111); } else { print(x); } if -x / 3 == y { print(222); } else { print(x); } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -184,7 +166,7 @@ TEST(InterpreterTests, EvaluatesBooleanLogic) {
   const std::string source =
       "var a bool = true;\n"
       "var b bool = false;\n"
-      "if a && !b || false { print(true); } else { print(false); }\n";
+      "func main() { if a && !b || false { print(true); } else { print(false); } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -209,8 +191,7 @@ TEST(InterpreterTests, SupportsBoolAssignmentFromIdentifier) {
   const std::string source =
       "var a bool = true;\n"
       "var b bool;\n"
-      "b = a;\n"
-      "print(b);\n";
+      "func main() { b = a; print(b); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -234,8 +215,7 @@ TEST(InterpreterTests, SupportsBoolAssignmentFromIdentifier) {
 TEST(InterpreterTests, UsesOuterVariableInInitializerBeforeInnerShadowing) {
   const std::string source =
       "var x int = 0;\n"
-      "{ var y int = x + 2; var x int = 10; print(y); }\n"
-      "print(x);\n";
+      "func main() { { var y int = x + 2; var x int = 10; print(y); } print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -244,8 +224,14 @@ TEST(InterpreterTests, UsesOuterVariableInInitializerBeforeInnerShadowing) {
   const auto* outer_x_declaration = GetTopDeclaration(program, 0);
   ASSERT_NE(outer_x_declaration, nullptr);
   ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
   const auto* block_statement =
-      std::get_if<Parsing::Block>(&program.top_statements[1]->value);
+      std::get_if<Parsing::Block>(&main_function->body->statements[0]->value);
   ASSERT_NE(block_statement, nullptr);
   ASSERT_EQ(block_statement->statements.size(), 3u);
   ASSERT_NE(block_statement->statements[0], nullptr);
@@ -278,8 +264,7 @@ TEST(InterpreterTests, UsesOuterVariableInInitializerBeforeInnerShadowing) {
 TEST(InterpreterTests, AssignmentInsideShadowingBlockDoesNotModifyOuterVariable) {
   const std::string source =
       "var x int = 1;\n"
-      "{ var x int = 2; x = x + 1; }\n"
-      "print(x);\n";
+      "func main() { { var x int = 2; x = x + 1; } print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -288,8 +273,14 @@ TEST(InterpreterTests, AssignmentInsideShadowingBlockDoesNotModifyOuterVariable)
   const auto* outer_x_declaration = GetTopDeclaration(program, 0);
   ASSERT_NE(outer_x_declaration, nullptr);
   ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
   const auto* block_statement =
-      std::get_if<Parsing::Block>(&program.top_statements[1]->value);
+      std::get_if<Parsing::Block>(&main_function->body->statements[0]->value);
   ASSERT_NE(block_statement, nullptr);
   ASSERT_EQ(block_statement->statements.size(), 2u);
   ASSERT_NE(block_statement->statements[0], nullptr);
@@ -311,7 +302,7 @@ TEST(InterpreterTests, AssignmentInsideShadowingBlockDoesNotModifyOuterVariable)
 }
 
 TEST(InterpreterTests, ThrowsOnFunctionCallStatement) {
-  const std::string source = "foo();\n";
+  const std::string source = "func main() { foo(); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -321,7 +312,7 @@ TEST(InterpreterTests, ThrowsOnFunctionCallStatement) {
 TEST(InterpreterTests, ThrowsOnFunctionCallStatementEvenWhenFunctionIsDeclared) {
   const std::string source =
       "func foo() int { return 1; }\n"
-      "foo();\n";
+      "func main() { foo(); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -330,8 +321,9 @@ TEST(InterpreterTests, ThrowsOnFunctionCallStatementEvenWhenFunctionIsDeclared) 
 
 TEST(InterpreterTests, ThrowsOnFunctionCallInsideArithmeticExpression) {
   const std::string source =
+      "func foo() int { return 1; }\n"
       "var x int;\n"
-      "x = foo() + 1;\n";
+      "func main() { x = foo() + 1; }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -340,6 +332,7 @@ TEST(InterpreterTests, ThrowsOnFunctionCallInsideArithmeticExpression) {
 
 TEST(InterpreterTests, ThrowsOnFunctionCallInsideBoolInitializer) {
   const std::string source =
+      "func foo() bool { return true; }\n"
       "var flag bool = foo();\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
@@ -348,7 +341,7 @@ TEST(InterpreterTests, ThrowsOnFunctionCallInsideBoolInitializer) {
 }
 
 TEST(InterpreterTests, ThrowsOnPrintOfUnknownVariable) {
-  const std::string source = "print(x);\n";
+  const std::string source = "func main() { print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -356,7 +349,7 @@ TEST(InterpreterTests, ThrowsOnPrintOfUnknownVariable) {
 }
 
 TEST(InterpreterTests, ThrowsOnAssignmentToUndeclaredVariable) {
-  const std::string source = "x = 1;\n";
+  const std::string source = "func main() { x = 1; }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -366,7 +359,7 @@ TEST(InterpreterTests, ThrowsOnAssignmentToUndeclaredVariable) {
 TEST(InterpreterTests, ThrowsOnDivisionByZero) {
   const std::string source =
       "var x int;\n"
-      "x = 4 / (2 - 2);\n";
+      "func main() { x = 4 / (2 - 2); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -374,7 +367,7 @@ TEST(InterpreterTests, ThrowsOnDivisionByZero) {
 }
 
 TEST(InterpreterTests, DivisionLeftRecursionTest) {
-  const std::string source = "print(100 / 5 / 2);\n";
+  const std::string source = "func main() { print(100 / 5 / 2); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -383,7 +376,7 @@ TEST(InterpreterTests, DivisionLeftRecursionTest) {
 }
 
 TEST(InterpreterTests, SubtractionLeftRecursionTest) {
-  const std::string source = "print(100 - 5 - 2);\n";
+  const std::string source = "func main() { print(100 - 5 - 2); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;

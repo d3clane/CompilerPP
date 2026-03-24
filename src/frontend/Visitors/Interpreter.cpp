@@ -333,9 +333,31 @@ InterpreterContext Interpret(const Program& program, std::ostream& output) {
 
   InterpreterContext context;
   InterpreterRuntime runtime{context, use_resolver};
+  const FunctionDeclarationStatement* main_function = nullptr;
+
   for (size_t i = 0; i < program.top_statements.size(); ++i) {
     assert(program.top_statements[i] != nullptr);
-    ExecuteStatement(*program.top_statements[i], runtime, output);
+    if (const auto* variable_declaration =
+            std::get_if<DeclarationStatement>(&program.top_statements[i]->value);
+        variable_declaration != nullptr) {
+      ExecuteDeclaration(*variable_declaration, runtime);
+      continue;
+    }
+
+    const auto* function_declaration =
+        std::get_if<FunctionDeclarationStatement>(&program.top_statements[i]->value);
+    if (function_declaration == nullptr) {
+      throw std::runtime_error("Top-level statement is not declaration");
+    }
+
+    if (function_declaration->function_name == "main") {
+      main_function = function_declaration;
+    }
+  }
+
+  if (main_function != nullptr) {
+    assert(main_function->body != nullptr);
+    ExecuteBlock(*main_function->body, runtime, output);
   }
 
   return context;

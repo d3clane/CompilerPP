@@ -17,7 +17,7 @@ const Parsing::IdentifierExpression* GetIdentifierFromExpression(
 TEST(ResolverTests, ResolvesOuterVariableForInitializerBeforeInnerShadowingDeclaration) {
   const std::string source =
       "var x int = 0;\n"
-      "{ var y int = x + 2; var x int = 10; }\n";
+      "func main() { var y int = x + 2; var x int = 10; }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
@@ -32,14 +32,15 @@ TEST(ResolverTests, ResolvesOuterVariableForInitializerBeforeInnerShadowingDecla
       std::get_if<Parsing::DeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(outer_x_declaration, nullptr);
 
-  const auto* block_statement =
-      std::get_if<Parsing::Block>(&program.top_statements[1]->value);
-  ASSERT_NE(block_statement, nullptr);
-  ASSERT_EQ(block_statement->statements.size(), 2u);
-  ASSERT_NE(block_statement->statements[0], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
 
   const auto* y_declaration =
-      std::get_if<Parsing::DeclarationStatement>(&block_statement->statements[0]->value);
+      std::get_if<Parsing::DeclarationStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(y_declaration, nullptr);
   ASSERT_NE(y_declaration->initializer, nullptr);
 
@@ -62,7 +63,7 @@ TEST(ResolverTests, ResolvesOuterVariableForInitializerBeforeInnerShadowingDecla
 TEST(ResolverTests, ResolvesInnerShadowedVariableInsideBlock) {
   const std::string source =
       "var x int = 1;\n"
-      "{ var x int = 2; print(x); }\n";
+      "func main() { var x int = 2; print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
@@ -70,17 +71,18 @@ TEST(ResolverTests, ResolvesInnerShadowedVariableInsideBlock) {
       Parsing::BuildUseResolver(program, symbol_table);
 
   ASSERT_EQ(program.top_statements.size(), 2u);
-  const auto* block_statement =
-      std::get_if<Parsing::Block>(&program.top_statements[1]->value);
-  ASSERT_NE(block_statement, nullptr);
-  ASSERT_EQ(block_statement->statements.size(), 2u);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
 
   const auto* inner_x_declaration =
-      std::get_if<Parsing::DeclarationStatement>(&block_statement->statements[0]->value);
+      std::get_if<Parsing::DeclarationStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(inner_x_declaration, nullptr);
 
   const auto* print_statement =
-      std::get_if<Parsing::PrintStatement>(&block_statement->statements[1]->value);
+      std::get_if<Parsing::PrintStatement>(&main_function->body->statements[1]->value);
   ASSERT_NE(print_statement, nullptr);
   ASSERT_NE(print_statement->expr, nullptr);
 
@@ -93,7 +95,7 @@ TEST(ResolverTests, ResolvesInnerShadowedVariableInsideBlock) {
 }
 
 TEST(ResolverTests, ThrowsOnUseBeforeDefinitionWithoutOuterDeclaration) {
-  const std::string source = "{ print(x); var x int = 1; }\n";
+  const std::string source = "func main() { print(x); var x int = 1; }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
@@ -105,7 +107,7 @@ TEST(ResolverTests, ThrowsOnUseBeforeDefinitionWithoutOuterDeclaration) {
 TEST(ResolverTests, ResolvesAssignmentTargetAndRhsIdentifierToInnerDeclaration) {
   const std::string source =
       "var x int = 1;\n"
-      "{ var x int = 2; x = x + 1; }\n";
+      "func main() { var x int = 2; x = x + 1; }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
@@ -113,17 +115,18 @@ TEST(ResolverTests, ResolvesAssignmentTargetAndRhsIdentifierToInnerDeclaration) 
       Parsing::BuildUseResolver(program, symbol_table);
 
   ASSERT_EQ(program.top_statements.size(), 2u);
-  const auto* block_statement =
-      std::get_if<Parsing::Block>(&program.top_statements[1]->value);
-  ASSERT_NE(block_statement, nullptr);
-  ASSERT_EQ(block_statement->statements.size(), 2u);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
 
   const auto* inner_x_declaration =
-      std::get_if<Parsing::DeclarationStatement>(&block_statement->statements[0]->value);
+      std::get_if<Parsing::DeclarationStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(inner_x_declaration, nullptr);
 
   const auto* assignment_statement =
-      std::get_if<Parsing::AssignmentStatement>(&block_statement->statements[1]->value);
+      std::get_if<Parsing::AssignmentStatement>(&main_function->body->statements[1]->value);
   ASSERT_NE(assignment_statement, nullptr);
   ASSERT_NE(assignment_statement->expr, nullptr);
 
@@ -145,20 +148,26 @@ TEST(ResolverTests, ResolvesAssignmentTargetAndRhsIdentifierToInnerDeclaration) 
 
 TEST(ResolverTests, ResolvesFunctionCallBeforeFunctionDefinitionInSameScope) {
   const std::string source =
-      "foo();\n"
-      "func foo() { }\n";
+      "func main() { foo(); func foo() { } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   const Parsing::UseResolver resolver =
       Parsing::BuildUseResolver(program, symbol_table);
 
-  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_EQ(program.top_statements.size(), 1u);
   ASSERT_NE(program.top_statements[0], nullptr);
-  ASSERT_NE(program.top_statements[1], nullptr);
+
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+  ASSERT_NE(main_function->body->statements[1], nullptr);
 
   const auto* call_expression =
-      std::get_if<Parsing::Expression>(&program.top_statements[0]->value);
+      std::get_if<Parsing::Expression>(&main_function->body->statements[0]->value);
   ASSERT_NE(call_expression, nullptr);
 
   const auto* function_call =
@@ -166,7 +175,7 @@ TEST(ResolverTests, ResolvesFunctionCallBeforeFunctionDefinitionInSameScope) {
   ASSERT_NE(function_call, nullptr);
 
   const auto* function_declaration =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+      std::get_if<Parsing::FunctionDeclarationStatement>(&main_function->body->statements[1]->value);
   ASSERT_NE(function_declaration, nullptr);
 
   EXPECT_EQ(
