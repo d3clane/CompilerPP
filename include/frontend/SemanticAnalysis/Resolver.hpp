@@ -2,7 +2,6 @@
 
 #include <map>
 #include <string>
-#include <string_view>
 
 #include "Parsing/Ast.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
@@ -11,8 +10,8 @@ namespace Parsing {
 
 class UseResolver {
  public:
-  AstNodeID GetUsedVarDef(std::string_view name, ASTNode* curr_node) const;
-  AstNodeID GetUsedVarDef(std::string_view name, AstNodeID curr_node_id) const;
+  AstNodeID GetUsedVarDef(const std::string& name, ASTNode* curr_node) const;
+  AstNodeID GetUsedVarDef(const std::string& name, AstNodeID curr_node_id) const;
 
  private:
   UseResolver() = default;

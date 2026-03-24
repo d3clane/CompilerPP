@@ -8,6 +8,20 @@
 
 namespace {
 
+const Parsing::DeclarationStatement* GetTopDeclaration(
+    const Parsing::Program& program,
+    size_t index) {
+  if (index >= program.top_statements.size()) {
+    return nullptr;
+  }
+
+  if (program.top_statements[index] == nullptr) {
+    return nullptr;
+  }
+
+  return std::get_if<Parsing::DeclarationStatement>(&program.top_statements[index]->value);
+}
+
 TEST(InterpreterTests, ExecutesIntAndBoolBranches) {
   const std::string source =
       "var x int;\n"
@@ -19,14 +33,18 @@ TEST(InterpreterTests, ExecutesIntAndBoolBranches) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* x_declaration = GetTopDeclaration(program, 0);
+  const Parsing::DeclarationStatement* flag_declaration = GetTopDeclaration(program, 1);
 
   EXPECT_EQ(output.str(), "5\nfalse\n");
-  ASSERT_EQ(context.variables.count("x"), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_declaration, nullptr);
+  ASSERT_NE(flag_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 5);
-  ASSERT_EQ(context.variables.count("flag"), 1);
-  const auto* flag_value = std::get_if<bool>(&context.variables.at("flag"));
+  ASSERT_EQ(context.variables.count(flag_declaration->GetId()), 1);
+  const auto* flag_value = std::get_if<bool>(&context.variables.at(flag_declaration->GetId()));
   ASSERT_NE(flag_value, nullptr);
   EXPECT_FALSE(*flag_value);
 }
@@ -41,10 +59,12 @@ TEST(InterpreterTests, ExecutesFalseBranchAndKeepsOrder) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* x_declaration = GetTopDeclaration(program, 0);
 
   EXPECT_EQ(output.str(), "-1\n2\n");
-  ASSERT_EQ(context.variables.count("x"), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 2);
 }
@@ -59,10 +79,12 @@ TEST(InterpreterTests, ExecutesElseIfBranch) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* x_declaration = GetTopDeclaration(program, 0);
 
   EXPECT_EQ(output.str(), "1\n7\n");
-  ASSERT_EQ(context.variables.count("x"), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 7);
 }
@@ -77,10 +99,12 @@ TEST(InterpreterTests, ExecutesMultipleElseIfBranches) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* x_declaration = GetTopDeclaration(program, 0);
 
   EXPECT_EQ(output.str(), "2\n9\n");
-  ASSERT_EQ(context.variables.count("x"), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 9);
 }
@@ -95,10 +119,12 @@ TEST(InterpreterTests, ExecutesIfWithoutElseAndSkipsBodyWhenFalse) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* x_declaration = GetTopDeclaration(program, 0);
 
   EXPECT_EQ(output.str(), "3\n");
-  ASSERT_EQ(context.variables.count("x"), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 3);
 }
@@ -113,10 +139,12 @@ TEST(InterpreterTests, ExecutesIfWithoutElseWhenConditionIsTrue) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* x_declaration = GetTopDeclaration(program, 0);
 
   EXPECT_EQ(output.str(), "7\n8\n");
-  ASSERT_EQ(context.variables.count("x"), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 8);
 }
@@ -136,14 +164,18 @@ TEST(InterpreterTests, EvaluatesArithmeticExpressionsWithPrecedence) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* x_declaration = GetTopDeclaration(program, 0);
+  const Parsing::DeclarationStatement* y_declaration = GetTopDeclaration(program, 1);
 
   EXPECT_EQ(output.str(), "16\n26\n-9\n222\n");
-  ASSERT_EQ(context.variables.count("x"), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at("x"));
+  ASSERT_NE(x_declaration, nullptr);
+  ASSERT_NE(y_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, -9);
-  ASSERT_EQ(context.variables.count("y"), 1);
-  const auto* y_value = std::get_if<int>(&context.variables.at("y"));
+  ASSERT_EQ(context.variables.count(y_declaration->GetId()), 1);
+  const auto* y_value = std::get_if<int>(&context.variables.at(y_declaration->GetId()));
   ASSERT_NE(y_value, nullptr);
   EXPECT_EQ(*y_value, 3);
 }
@@ -157,14 +189,18 @@ TEST(InterpreterTests, EvaluatesBooleanLogic) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* a_declaration = GetTopDeclaration(program, 0);
+  const Parsing::DeclarationStatement* b_declaration = GetTopDeclaration(program, 1);
 
   EXPECT_EQ(output.str(), "true\n");
-  ASSERT_EQ(context.variables.count("a"), 1);
-  const auto* a_value = std::get_if<bool>(&context.variables.at("a"));
+  ASSERT_NE(a_declaration, nullptr);
+  ASSERT_NE(b_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(a_declaration->GetId()), 1);
+  const auto* a_value = std::get_if<bool>(&context.variables.at(a_declaration->GetId()));
   ASSERT_NE(a_value, nullptr);
   EXPECT_TRUE(*a_value);
-  ASSERT_EQ(context.variables.count("b"), 1);
-  const auto* b_value = std::get_if<bool>(&context.variables.at("b"));
+  ASSERT_EQ(context.variables.count(b_declaration->GetId()), 1);
+  const auto* b_value = std::get_if<bool>(&context.variables.at(b_declaration->GetId()));
   ASSERT_NE(b_value, nullptr);
   EXPECT_FALSE(*b_value);
 }
@@ -179,20 +215,113 @@ TEST(InterpreterTests, SupportsBoolAssignmentFromIdentifier) {
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
   const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+  const Parsing::DeclarationStatement* a_declaration = GetTopDeclaration(program, 0);
+  const Parsing::DeclarationStatement* b_declaration = GetTopDeclaration(program, 1);
 
   EXPECT_EQ(output.str(), "true\n");
-  ASSERT_EQ(context.variables.count("a"), 1);
-  const auto* a_value = std::get_if<bool>(&context.variables.at("a"));
+  ASSERT_NE(a_declaration, nullptr);
+  ASSERT_NE(b_declaration, nullptr);
+  ASSERT_EQ(context.variables.count(a_declaration->GetId()), 1);
+  const auto* a_value = std::get_if<bool>(&context.variables.at(a_declaration->GetId()));
   ASSERT_NE(a_value, nullptr);
   EXPECT_TRUE(*a_value);
-  ASSERT_EQ(context.variables.count("b"), 1);
-  const auto* b_value = std::get_if<bool>(&context.variables.at("b"));
+  ASSERT_EQ(context.variables.count(b_declaration->GetId()), 1);
+  const auto* b_value = std::get_if<bool>(&context.variables.at(b_declaration->GetId()));
   ASSERT_NE(b_value, nullptr);
   EXPECT_TRUE(*b_value);
 }
 
+TEST(InterpreterTests, UsesOuterVariableInInitializerBeforeInnerShadowing) {
+  const std::string source =
+      "var x int = 0;\n"
+      "{ var y int = x + 2; var x int = 10; print(y); }\n"
+      "print(x);\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+
+  const auto* outer_x_declaration = GetTopDeclaration(program, 0);
+  ASSERT_NE(outer_x_declaration, nullptr);
+  ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* block_statement =
+      std::get_if<Parsing::Block>(&program.top_statements[1]->value);
+  ASSERT_NE(block_statement, nullptr);
+  ASSERT_EQ(block_statement->statements.size(), 3u);
+  ASSERT_NE(block_statement->statements[0], nullptr);
+  ASSERT_NE(block_statement->statements[1], nullptr);
+
+  const auto* y_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&block_statement->statements[0]->value);
+  ASSERT_NE(y_declaration, nullptr);
+  const auto* inner_x_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&block_statement->statements[1]->value);
+  ASSERT_NE(inner_x_declaration, nullptr);
+
+  EXPECT_EQ(output.str(), "2\n0\n");
+  ASSERT_EQ(context.variables.count(outer_x_declaration->GetId()), 1);
+  ASSERT_EQ(context.variables.count(y_declaration->GetId()), 1);
+  ASSERT_EQ(context.variables.count(inner_x_declaration->GetId()), 1);
+  const auto* outer_x_value =
+      std::get_if<int>(&context.variables.at(outer_x_declaration->GetId()));
+  ASSERT_NE(outer_x_value, nullptr);
+  EXPECT_EQ(*outer_x_value, 0);
+  const auto* y_value = std::get_if<int>(&context.variables.at(y_declaration->GetId()));
+  ASSERT_NE(y_value, nullptr);
+  EXPECT_EQ(*y_value, 2);
+  const auto* inner_x_value =
+      std::get_if<int>(&context.variables.at(inner_x_declaration->GetId()));
+  ASSERT_NE(inner_x_value, nullptr);
+  EXPECT_EQ(*inner_x_value, 10);
+}
+
+TEST(InterpreterTests, AssignmentInsideShadowingBlockDoesNotModifyOuterVariable) {
+  const std::string source =
+      "var x int = 1;\n"
+      "{ var x int = 2; x = x + 1; }\n"
+      "print(x);\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+
+  const auto* outer_x_declaration = GetTopDeclaration(program, 0);
+  ASSERT_NE(outer_x_declaration, nullptr);
+  ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* block_statement =
+      std::get_if<Parsing::Block>(&program.top_statements[1]->value);
+  ASSERT_NE(block_statement, nullptr);
+  ASSERT_EQ(block_statement->statements.size(), 2u);
+  ASSERT_NE(block_statement->statements[0], nullptr);
+  const auto* inner_x_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&block_statement->statements[0]->value);
+  ASSERT_NE(inner_x_declaration, nullptr);
+
+  EXPECT_EQ(output.str(), "1\n");
+  ASSERT_EQ(context.variables.count(outer_x_declaration->GetId()), 1);
+  ASSERT_EQ(context.variables.count(inner_x_declaration->GetId()), 1);
+  const auto* outer_x_value =
+      std::get_if<int>(&context.variables.at(outer_x_declaration->GetId()));
+  ASSERT_NE(outer_x_value, nullptr);
+  EXPECT_EQ(*outer_x_value, 1);
+  const auto* inner_x_value =
+      std::get_if<int>(&context.variables.at(inner_x_declaration->GetId()));
+  ASSERT_NE(inner_x_value, nullptr);
+  EXPECT_EQ(*inner_x_value, 3);
+}
+
 TEST(InterpreterTests, ThrowsOnFunctionCallStatement) {
   const std::string source = "foo();\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
+}
+
+TEST(InterpreterTests, ThrowsOnFunctionCallStatementEvenWhenFunctionIsDeclared) {
+  const std::string source =
+      "func foo() int { return 1; }\n"
+      "foo();\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;

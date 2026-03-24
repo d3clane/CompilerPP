@@ -1,10 +1,8 @@
 #include "SemanticAnalysis/Resolver.hpp"
 
 #include <cassert>
-#include <limits>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <variant>
 
 #include "Utils/Overload.hpp"
@@ -12,8 +10,6 @@
 namespace Parsing {
 
 namespace {
-
-constexpr AstNodeID kInvalidAstNodeID = std::numeric_limits<AstNodeID>::max();
 
 struct LocalUse {
   AstNodeID node_id;
@@ -231,7 +227,7 @@ class UseResolverBuilder {
 
 }  // namespace
 
-AstNodeID UseResolver::GetUsedVarDef(std::string_view name, ASTNode* curr_node) const {
+AstNodeID UseResolver::GetUsedVarDef(const std::string& name, ASTNode* curr_node) const {
   if (curr_node == nullptr) {
     return kInvalidAstNodeID;
   }
@@ -239,7 +235,7 @@ AstNodeID UseResolver::GetUsedVarDef(std::string_view name, ASTNode* curr_node) 
   return GetUsedVarDef(name, curr_node->GetId());
 }
 
-AstNodeID UseResolver::GetUsedVarDef(std::string_view name, AstNodeID curr_node_id) const {
+AstNodeID UseResolver::GetUsedVarDef(const std::string& name, AstNodeID curr_node_id) const {
   const auto definition_it =
       use_to_definition_.find(Use{curr_node_id, std::string(name)});
   if (definition_it == use_to_definition_.end()) {

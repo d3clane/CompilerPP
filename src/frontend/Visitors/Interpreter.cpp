@@ -3,9 +3,12 @@
 #include <cassert>
 #include <iostream>
 #include <stdexcept>
-#include <type_traits>
+#include <string>
+#include <utility>
 #include <variant>
 
+#include "SemanticAnalysis/Resolver.hpp"
+#include "SemanticAnalysis/SymbolTable.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -17,140 +20,166 @@ namespace {
       "Function calls are not supported by interpreter: " + function_call.function_name);
 }
 
-[[noreturn]] void ThrowTypeError(const std::string& message) {
-  throw std::runtime_error("Type error: " + message);
-}
-
-int RequireInt(const RuntimeValue& value, const std::string& context) {
-  if (const auto* int_value = std::get_if<int>(&value); int_value != nullptr) {
-    return *int_value;
-  }
-
-  ThrowTypeError(context + " requires int");
-}
-
-bool RequireBool(const RuntimeValue& value, const std::string& context) {
-  if (const auto* bool_value = std::get_if<bool>(&value); bool_value != nullptr) {
-    return *bool_value;
-  }
-
-  ThrowTypeError(context + " requires bool");
-}
-
 bool EvaluateEquality(const RuntimeValue& left, const RuntimeValue& right, bool negated) {
-  if (left.index() != right.index()) {
-    ThrowTypeError(std::string(negated ? "!=" : "==") + " requires operands of the same type");
-  }
   return left == right ? !negated : negated;
 }
 
-RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterContext& context);
+struct InterpreterRuntime {
+  InterpreterContext& context;
+  const UseResolver& use_resolver;
+};
 
-template <typename T>
-inline constexpr bool kAlwaysFalse = false;
-
-template <UnaryExpressionNode T>
-RuntimeValue EvaluateUnaryExpression(
-    const T& unary_expression,
-    const InterpreterContext& context) {
-  assert(unary_expression.operand != nullptr);
-  const RuntimeValue operand_value = EvaluateExpression(*unary_expression.operand, context);
-
-  if constexpr (std::same_as<T, UnaryPlusExpression>) {
-    return RuntimeValue{RequireInt(operand_value, "Unary +")};
-  } else if constexpr (std::same_as<T, UnaryMinusExpression>) {
-    return RuntimeValue{-RequireInt(operand_value, "Unary -")};
-  } else if constexpr (std::same_as<T, UnaryNotExpression>) {
-    return RuntimeValue{!RequireBool(operand_value, "Unary !")};
-  } else {
-    static_assert(kAlwaysFalse<T>, "Unsupported unary expression node");
+AstNodeID ResolveVariableDefinitionId(
+    const std::string& name,
+    const ASTNode& use_node,
+    const UseResolver& use_resolver,
+    const std::string& missing_symbol_error_prefix) {
+  const AstNodeID definition_id = use_resolver.GetUsedVarDef(name, use_node.GetId());
+  if (definition_id == kInvalidAstNodeID) {
+    throw std::runtime_error(missing_symbol_error_prefix + name);
   }
+
+  return definition_id;
 }
 
-template <BinaryExpressionNode T>
-RuntimeValue EvaluateBinaryExpression(
-    const T& binary_expression,
-    const InterpreterContext& context) {
+RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterRuntime& runtime);
+
+std::pair<RuntimeValue, RuntimeValue> EvaluateBinaryOperands(
+    const BinaryOperationBase& binary_expression,
+    const InterpreterRuntime& runtime) {
   assert(binary_expression.left != nullptr);
   assert(binary_expression.right != nullptr);
-
-  if constexpr (std::same_as<T, LogicalAndExpression>) {
-    const RuntimeValue left_value = EvaluateExpression(*binary_expression.left, context);
-    if (!RequireBool(left_value, "&&")) {
-      return RuntimeValue{false};
-    }
-
-    const RuntimeValue right_value = EvaluateExpression(*binary_expression.right, context);
-    return RuntimeValue{RequireBool(right_value, "&&")};
-  } else if constexpr (std::same_as<T, LogicalOrExpression>) {
-    const RuntimeValue left_value = EvaluateExpression(*binary_expression.left, context);
-    if (RequireBool(left_value, "||")) {
-      return RuntimeValue{true};
-    }
-
-    const RuntimeValue right_value = EvaluateExpression(*binary_expression.right, context);
-    return RuntimeValue{RequireBool(right_value, "||")};
-  } else {
-    const RuntimeValue left_value = EvaluateExpression(*binary_expression.left, context);
-    const RuntimeValue right_value = EvaluateExpression(*binary_expression.right, context);
-
-    if constexpr (std::same_as<T, AddExpression>) {
-      return RuntimeValue{RequireInt(left_value, "+") + RequireInt(right_value, "+")};
-    } else if constexpr (std::same_as<T, SubtractExpression>) {
-      return RuntimeValue{RequireInt(left_value, "-") - RequireInt(right_value, "-")};
-    } else if constexpr (std::same_as<T, MultiplyExpression>) {
-      return RuntimeValue{RequireInt(left_value, "*") * RequireInt(right_value, "*")};
-    } else if constexpr (std::same_as<T, DivideExpression>) {
-      const int divisor = RequireInt(right_value, "/");
-      if (divisor == 0) {
-        throw std::runtime_error("Division by zero");
-      }
-
-      return RuntimeValue{RequireInt(left_value, "/") / divisor};
-    } else if constexpr (std::same_as<T, ModuloExpression>) {
-      const int divisor = RequireInt(right_value, "%");
-      if (divisor == 0) {
-        throw std::runtime_error("Modulo by zero");
-      }
-
-      return RuntimeValue{RequireInt(left_value, "%") % divisor};
-    } else if constexpr (std::same_as<T, EqualExpression>) {
-      return RuntimeValue{EvaluateEquality(left_value, right_value, false)};
-    } else if constexpr (std::same_as<T, NotEqualExpression>) {
-      return RuntimeValue{EvaluateEquality(left_value, right_value, true)};
-    } else if constexpr (std::same_as<T, LessExpression>) {
-      return RuntimeValue{RequireInt(left_value, "<") < RequireInt(right_value, "<")};
-    } else if constexpr (std::same_as<T, GreaterExpression>) {
-      return RuntimeValue{RequireInt(left_value, ">") > RequireInt(right_value, ">")};
-    } else if constexpr (std::same_as<T, LessEqualExpression>) {
-      return RuntimeValue{RequireInt(left_value, "<=") <= RequireInt(right_value, "<=")};
-    } else if constexpr (std::same_as<T, GreaterEqualExpression>) {
-      return RuntimeValue{RequireInt(left_value, ">=") >= RequireInt(right_value, ">=")};
-    } else {
-      static_assert(kAlwaysFalse<T>, "Unsupported binary expression node");
-    }
-  }
+  return {
+      EvaluateExpression(*binary_expression.left, runtime),
+      EvaluateExpression(*binary_expression.right, runtime)};
 }
 
-RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterContext& context) {
+RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterRuntime& runtime) {
   return std::visit(
       Utils::Overload{
           [](const LiteralExpression& literal) -> RuntimeValue {
             return literal.value;
           },
-          [&context](const IdentifierExpression& identifier) -> RuntimeValue {
-            const auto variable_it = context.variables.find(identifier.name);
-            if (variable_it != context.variables.end()) {
-              return variable_it->second;
+          [&runtime](const IdentifierExpression& identifier) -> RuntimeValue {
+            const AstNodeID definition_id = ResolveVariableDefinitionId(
+                identifier.name,
+                identifier,
+                runtime.use_resolver,
+                "Unknown variable: ");
+            const auto variable_it = runtime.context.variables.find(definition_id);
+            if (variable_it == runtime.context.variables.end()) {
+              throw std::runtime_error("Unknown variable: " + identifier.name);
             }
 
-            throw std::runtime_error("Unknown variable: " + identifier.name);
+            return variable_it->second;
           },
-          [&context]<UnaryExpressionNode Node>(const Node& expression_node) -> RuntimeValue {
-            return EvaluateUnaryExpression(expression_node, context);
+          [&runtime](const UnaryPlusExpression& unary_expression) -> RuntimeValue {
+            assert(unary_expression.operand != nullptr);
+            return RuntimeValue{
+                std::get<int>(EvaluateExpression(*unary_expression.operand, runtime))};
           },
-          [&context]<BinaryExpressionNode Node>(const Node& expression_node) -> RuntimeValue {
-            return EvaluateBinaryExpression(expression_node, context);
+          [&runtime](const UnaryMinusExpression& unary_expression) -> RuntimeValue {
+            assert(unary_expression.operand != nullptr);
+            return RuntimeValue{
+                -std::get<int>(EvaluateExpression(*unary_expression.operand, runtime))};
+          },
+          [&runtime](const UnaryNotExpression& unary_expression) -> RuntimeValue {
+            assert(unary_expression.operand != nullptr);
+            return RuntimeValue{
+                !std::get<bool>(EvaluateExpression(*unary_expression.operand, runtime))};
+          },
+          [&runtime](const AddExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{std::get<int>(left_value) + std::get<int>(right_value)};
+          },
+          [&runtime](const SubtractExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{std::get<int>(left_value) - std::get<int>(right_value)};
+          },
+          [&runtime](const MultiplyExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{std::get<int>(left_value) * std::get<int>(right_value)};
+          },
+          [&runtime](const DivideExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            const int divisor = std::get<int>(right_value);
+            if (divisor == 0) {
+              throw std::runtime_error("Division by zero");
+            }
+
+            return RuntimeValue{std::get<int>(left_value) / divisor};
+          },
+          [&runtime](const ModuloExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            const int divisor = std::get<int>(right_value);
+            if (divisor == 0) {
+              throw std::runtime_error("Modulo by zero");
+            }
+
+            return RuntimeValue{std::get<int>(left_value) % divisor};
+          },
+          [&runtime](const LogicalAndExpression& binary_expression) -> RuntimeValue {
+            assert(binary_expression.left != nullptr);
+            assert(binary_expression.right != nullptr);
+
+            const RuntimeValue left_value =
+                EvaluateExpression(*binary_expression.left, runtime);
+            if (!std::get<bool>(left_value)) {
+              return RuntimeValue{false};
+            }
+
+            const RuntimeValue right_value =
+                EvaluateExpression(*binary_expression.right, runtime);
+            return RuntimeValue{std::get<bool>(right_value)};
+          },
+          [&runtime](const LogicalOrExpression& binary_expression) -> RuntimeValue {
+            assert(binary_expression.left != nullptr);
+            assert(binary_expression.right != nullptr);
+
+            const RuntimeValue left_value =
+                EvaluateExpression(*binary_expression.left, runtime);
+            if (std::get<bool>(left_value)) {
+              return RuntimeValue{true};
+            }
+
+            const RuntimeValue right_value =
+                EvaluateExpression(*binary_expression.right, runtime);
+            return RuntimeValue{std::get<bool>(right_value)};
+          },
+          [&runtime](const EqualExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{EvaluateEquality(left_value, right_value, false)};
+          },
+          [&runtime](const NotEqualExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{EvaluateEquality(left_value, right_value, true)};
+          },
+          [&runtime](const LessExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{std::get<int>(left_value) < std::get<int>(right_value)};
+          },
+          [&runtime](const GreaterExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{std::get<int>(left_value) > std::get<int>(right_value)};
+          },
+          [&runtime](const LessEqualExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{std::get<int>(left_value) <= std::get<int>(right_value)};
+          },
+          [&runtime](const GreaterEqualExpression& binary_expression) -> RuntimeValue {
+            const auto [left_value, right_value] =
+                EvaluateBinaryOperands(binary_expression, runtime);
+            return RuntimeValue{std::get<int>(left_value) >= std::get<int>(right_value)};
           },
           [](const FunctionCall& function_call) -> RuntimeValue {
             ThrowFunctionCallNotSupported(function_call);
@@ -158,63 +187,61 @@ RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterC
       expression.value);
 }
 
-void ExecuteBlock(const Block& block, InterpreterContext& context, std::ostream& output);
+void ExecuteBlock(const Block& block, InterpreterRuntime& runtime, std::ostream& output);
 
-void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterContext& context) {
-  if (context.variables.find(declaration.variable_name) != context.variables.end()) {
+void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRuntime& runtime) {
+  if (runtime.context.variables.find(declaration.GetId()) != runtime.context.variables.end()) {
     throw std::runtime_error("Variable already declared: " + declaration.variable_name);
   }
 
   if (std::holds_alternative<IntType>(declaration.type)) {
     RuntimeValue value{0};
     if (declaration.initializer != nullptr) {
-      const RuntimeValue initializer_value = EvaluateExpression(*declaration.initializer, context);
-      value = RuntimeValue{RequireInt(initializer_value, "int initializer")};
+      value = EvaluateExpression(*declaration.initializer, runtime);
     }
 
-    context.variables.emplace(declaration.variable_name, value);
+    runtime.context.variables.emplace(declaration.GetId(), value);
     return;
   }
 
   if (std::holds_alternative<BoolType>(declaration.type)) {
     RuntimeValue value{false};
     if (declaration.initializer != nullptr) {
-      const RuntimeValue initializer_value = EvaluateExpression(*declaration.initializer, context);
-      value = RuntimeValue{RequireBool(initializer_value, "bool initializer")};
+      value = EvaluateExpression(*declaration.initializer, runtime);
     }
 
-    context.variables.emplace(declaration.variable_name, value);
+    runtime.context.variables.emplace(declaration.GetId(), value);
     return;
   }
 
   throw std::runtime_error("Unsupported type in declaration");
 }
 
-void ExecuteAssignment(const AssignmentStatement& assignment, InterpreterContext& context) {
+void ExecuteAssignment(const AssignmentStatement& assignment, InterpreterRuntime& runtime) {
   assert(assignment.expr != nullptr);
 
-  auto variable_it = context.variables.find(assignment.variable_name);
-  if (variable_it == context.variables.end()) {
+  const AstNodeID definition_id = ResolveVariableDefinitionId(
+      assignment.variable_name,
+      assignment,
+      runtime.use_resolver,
+      "Variable is not declared before assignment: ");
+  auto variable_it = runtime.context.variables.find(definition_id);
+  if (variable_it == runtime.context.variables.end()) {
     throw std::runtime_error(
         "Variable is not declared before assignment: " + assignment.variable_name);
   }
 
-  const RuntimeValue assigned_value = EvaluateExpression(*assignment.expr, context);
-  if (std::holds_alternative<int>(variable_it->second)) {
-    variable_it->second = RuntimeValue{RequireInt(assigned_value, "int assignment")};
-    return;
-  }
-
-  variable_it->second = RuntimeValue{RequireBool(assigned_value, "bool assignment")};
+  const RuntimeValue assigned_value = EvaluateExpression(*assignment.expr, runtime);
+  variable_it->second = assigned_value;
 }
 
 void ExecutePrint(
     const PrintStatement& print_statement,
-    InterpreterContext& context,
+    InterpreterRuntime& runtime,
     std::ostream& output) {
   assert(print_statement.expr != nullptr);
 
-  const RuntimeValue print_value = EvaluateExpression(*print_statement.expr, context);
+  const RuntimeValue print_value = EvaluateExpression(*print_statement.expr, runtime);
   std::visit(
       Utils::Overload{
           [&output](int value) {
@@ -228,7 +255,7 @@ void ExecutePrint(
 
 void ExecuteIf(
     const IfStatement& if_statement,
-    InterpreterContext& context,
+    InterpreterRuntime& runtime,
     std::ostream& output) {
   assert(if_statement.condition != nullptr);
   assert(if_statement.true_block != nullptr);
@@ -236,21 +263,21 @@ void ExecuteIf(
   assert(!(if_statement.else_tail->else_if != nullptr &&
            if_statement.else_tail->else_block != nullptr));
 
-  const RuntimeValue condition_value = EvaluateExpression(*if_statement.condition, context);
-  const bool condition_result = RequireBool(condition_value, "if condition");
+  const RuntimeValue condition_value = EvaluateExpression(*if_statement.condition, runtime);
+  const bool condition_result = std::get<bool>(condition_value);
 
   if (condition_result) {
-    ExecuteBlock(*if_statement.true_block, context, output);
+    ExecuteBlock(*if_statement.true_block, runtime, output);
     return;
   }
 
   if (if_statement.else_tail->else_if != nullptr) {
-    ExecuteIf(*if_statement.else_tail->else_if, context, output);
+    ExecuteIf(*if_statement.else_tail->else_if, runtime, output);
     return;
   }
 
   if (if_statement.else_tail->else_block != nullptr) {
-    ExecuteBlock(*if_statement.else_tail->else_block, context, output);
+    ExecuteBlock(*if_statement.else_tail->else_block, runtime, output);
   }
 }
 
@@ -260,52 +287,55 @@ void ExecuteReturn(const ReturnStatement&) {
 
 void ExecuteStatement(
     const Statement& statement,
-    InterpreterContext& context,
+    InterpreterRuntime& runtime,
     std::ostream& output) {
   std::visit(
       Utils::Overload{
-          [&context](const DeclarationStatement& declaration) {
-            ExecuteDeclaration(declaration, context);
+          [&runtime](const DeclarationStatement& declaration) {
+            ExecuteDeclaration(declaration, runtime);
           },
           [](const FunctionDeclarationStatement&) {
             // Function bodies are not executed during declaration.
           },
-          [&context](const AssignmentStatement& assignment) {
-            ExecuteAssignment(assignment, context);
+          [&runtime](const AssignmentStatement& assignment) {
+            ExecuteAssignment(assignment, runtime);
           },
-          [&context, &output](const PrintStatement& print_statement) {
-            ExecutePrint(print_statement, context, output);
+          [&runtime, &output](const PrintStatement& print_statement) {
+            ExecutePrint(print_statement, runtime, output);
           },
-          [&context, &output](const IfStatement& if_statement) {
-            ExecuteIf(if_statement, context, output);
+          [&runtime, &output](const IfStatement& if_statement) {
+            ExecuteIf(if_statement, runtime, output);
           },
           [](const ReturnStatement& return_statement) {
             ExecuteReturn(return_statement);
           },
-          [&context](const Expression& expression) {
-            static_cast<void>(EvaluateExpression(expression, context));
+          [&runtime](const Expression& expression) {
+            static_cast<void>(EvaluateExpression(expression, runtime));
           },
-          [&context, &output](const Block& block) {
-            ExecuteBlock(block, context, output);
+          [&runtime, &output](const Block& block) {
+            ExecuteBlock(block, runtime, output);
           }},
       statement.value);
 }
 
-void ExecuteBlock(const Block& block, InterpreterContext& context, std::ostream& output) {
+void ExecuteBlock(const Block& block, InterpreterRuntime& runtime, std::ostream& output) {
   for (size_t i = 0; i < block.statements.size(); ++i) {
     assert(block.statements[i] != nullptr);
-    ExecuteStatement(*block.statements[i], context, output);
+    ExecuteStatement(*block.statements[i], runtime, output);
   }
 }
 
 }  // namespace
 
 InterpreterContext Interpret(const Program& program, std::ostream& output) {
-  InterpreterContext context;
+  SymbolTable symbol_table = BuildSymbolTable(program);
+  UseResolver use_resolver = BuildUseResolver(program, symbol_table);
 
+  InterpreterContext context;
+  InterpreterRuntime runtime{context, use_resolver};
   for (size_t i = 0; i < program.top_statements.size(); ++i) {
     assert(program.top_statements[i] != nullptr);
-    ExecuteStatement(*program.top_statements[i], context, output);
+    ExecuteStatement(*program.top_statements[i], runtime, output);
   }
 
   return context;

@@ -1,8 +1,7 @@
 #pragma once
 
 #include <iosfwd>
-#include <map>
-#include <string>
+#include <unordered_map>
 #include <variant>
 
 #include "Parsing/Ast.hpp"
@@ -12,7 +11,7 @@ namespace Parsing {
 using RuntimeValue = std::variant<int, bool>;
 
 struct InterpreterContext {
-  std::map<std::string, RuntimeValue> variables;
+  std::unordered_map<AstNodeID, RuntimeValue> variables;
 };
 
 InterpreterContext Interpret(const Program& program, std::ostream& output);

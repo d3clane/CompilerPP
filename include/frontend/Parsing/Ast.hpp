@@ -51,6 +51,8 @@ class ASTNode {
   const AstNodeID id_;
 };
 
+inline static constexpr AstNodeID kInvalidAstNodeID = std::numeric_limits<AstNodeID>::max();
+
 template <typename T>
 using List = std::vector<std::unique_ptr<T>>;
 
