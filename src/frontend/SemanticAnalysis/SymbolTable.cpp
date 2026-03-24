@@ -12,7 +12,7 @@ namespace Parsing {
 LocalSymbolTable::LocalSymbolTable(LocalSymbolTable* parent)
     : parent_(parent) {}
 
-const SymbolData* LocalSymbolTable::GetSymbolInfoInCurrentScope(
+const SymbolData* LocalSymbolTable::GetSymbolInfoInLocalScope(
     const std::string& name) const {
   const auto symbol_it = symbols_.find(name);
   if (symbol_it == symbols_.end()) {
@@ -25,7 +25,7 @@ const SymbolData* LocalSymbolTable::GetSymbolInfoInCurrentScope(
 const SymbolData* LocalSymbolTable::GetVisibleSymbolInParents(
     const std::string& name) const {
   for (const LocalSymbolTable* table = parent_; table != nullptr; table = table->parent_) {
-    const SymbolData* symbol_data = table->GetSymbolInfoInCurrentScope(name);
+    const SymbolData* symbol_data = table->GetSymbolInfoInLocalScope(name);
     if (symbol_data != nullptr) {
       return symbol_data;
     }
@@ -35,7 +35,7 @@ const SymbolData* LocalSymbolTable::GetVisibleSymbolInParents(
 }
 
 const SymbolData* LocalSymbolTable::GetSymbolInfo(const std::string& name) const {
-  const SymbolData* current_scope_symbol = GetSymbolInfoInCurrentScope(name);
+  const SymbolData* current_scope_symbol = GetSymbolInfoInLocalScope(name);
   if (current_scope_symbol != nullptr) {
     return current_scope_symbol;
   }
@@ -48,7 +48,7 @@ const SymbolData* LocalSymbolTable::GetSymbolInfo(const std::string& name) const
 }
 
 void LocalSymbolTable::AddSymbolInfo(SymbolData symbol_data) {
-  if (GetSymbolInfoInCurrentScope(symbol_data.name) != nullptr) {
+  if (GetSymbolInfoInLocalScope(symbol_data.name) != nullptr) {
     throw std::runtime_error("Duplicate declaration in the same scope: " + symbol_data.name);
   }
 
@@ -89,6 +89,23 @@ const LocalSymbolTable* SymbolTable::GetTable(AstNodeID node_id) const {
 
 const LocalSymbolTable* SymbolTable::GetTable(const ASTNode& node) const {
   return GetTable(node.GetId());
+}
+
+const SymbolData* SymbolTable::GetSymbolInfoInLocalScope(
+    const std::string& name,
+    AstNodeID node_id) const {
+  const LocalSymbolTable* scope = GetTable(node_id);
+  if (scope == nullptr) {
+    return nullptr;
+  }
+
+  return scope->GetSymbolInfoInLocalScope(name);
+}
+
+const SymbolData* SymbolTable::GetSymbolInfoInLocalScope(
+    const std::string& name,
+    const ASTNode& node) const {
+  return GetSymbolInfoInLocalScope(name, node.GetId());
 }
 
 const SymbolData* SymbolTable::GetSymbolInfo(

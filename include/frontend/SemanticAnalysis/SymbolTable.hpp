@@ -44,11 +44,11 @@ class LocalSymbolTable {
   explicit LocalSymbolTable(LocalSymbolTable* parent);
 
   const SymbolData* GetSymbolInfo(const std::string& name) const;
+  const SymbolData* GetSymbolInfoInLocalScope(const std::string& name) const;
   void AddSymbolInfo(SymbolData symbol_data);
   LocalSymbolTable* GetParent() const;
 
  private:
-  const SymbolData* GetSymbolInfoInCurrentScope(const std::string& name) const;
   const SymbolData* GetVisibleSymbolInParents(const std::string& name) const;
 
   LocalSymbolTable* parent_;
@@ -64,6 +64,13 @@ class SymbolTable {
 
   const LocalSymbolTable* GetTable(AstNodeID node_id) const;
   const LocalSymbolTable* GetTable(const ASTNode& node) const;
+
+  const SymbolData* GetSymbolInfoInLocalScope(
+      const std::string& name,
+      AstNodeID node_id) const;
+  const SymbolData* GetSymbolInfoInLocalScope(
+      const std::string& name,
+      const ASTNode& node) const;
 
   const SymbolData* GetSymbolInfo(const std::string& name, AstNodeID node_id) const;
   const SymbolData* GetSymbolInfo(const std::string& name, const ASTNode& node) const;

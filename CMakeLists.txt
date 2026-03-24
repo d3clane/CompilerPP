@@ -34,6 +34,7 @@ add_library(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Interpreter.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/SymbolTable.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/Resolver.cpp"
 )
 
 target_include_directories(
@@ -68,6 +69,7 @@ add_executable(
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/ParserTreeTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/InterpreterTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/SymbolTableTests.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/ResolverTests.cpp"
 )
 
 target_link_libraries(
