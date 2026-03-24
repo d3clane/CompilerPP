@@ -34,13 +34,13 @@ TEST(SymbolTableTests, BuildsScopesWithoutUseResolutionChecks) {
       std::get_if<Parsing::DeclarationStatement>(&main_function->body->statements[1]->value);
   ASSERT_NE(inner_x_declaration, nullptr);
 
-  const Parsing::SymbolData* root_x = symbol_table.GetSymbolInfo("x", program);
+  const Parsing::SymbolData* root_x = symbol_table.GetSymbolInfo("x", &program);
   ASSERT_NE(root_x, nullptr);
-  EXPECT_EQ(root_x->declaration_node_id, outer_x_declaration->GetId());
+  EXPECT_EQ(root_x->declaration_node, outer_x_declaration);
 
-  const Parsing::SymbolData* block_x = symbol_table.GetSymbolInfo("x", *main_function->body);
+  const Parsing::SymbolData* block_x = symbol_table.GetSymbolInfo("x", main_function->body.get());
   ASSERT_NE(block_x, nullptr);
-  EXPECT_EQ(block_x->declaration_node_id, inner_x_declaration->GetId());
+  EXPECT_EQ(block_x->declaration_node, inner_x_declaration);
 }
 
 TEST(SymbolTableTests, ThrowsOnDuplicateDeclarationInSameScope) {
@@ -84,7 +84,7 @@ TEST(SymbolTableTests, DoesNotCheckUseBeforeDefinitionDuringBuild) {
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 2);
 
-  const Parsing::SymbolData* symbol_x = symbol_table.GetSymbolInfo("x", *main_function->body);
+  const Parsing::SymbolData* symbol_x = symbol_table.GetSymbolInfo("x", main_function->body.get());
   ASSERT_NE(symbol_x, nullptr);
   EXPECT_EQ(symbol_x->in_scope_stmt_id, 2u);
 }
@@ -106,10 +106,10 @@ TEST(SymbolTableTests, ResolvesIdentifierLookupThroughParentScope) {
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1);
 
-  const Parsing::SymbolData* visible_x = symbol_table.GetSymbolInfo("x", *main_function->body);
+  const Parsing::SymbolData* visible_x = symbol_table.GetSymbolInfo("x", main_function->body.get());
   ASSERT_NE(visible_x, nullptr);
   EXPECT_EQ(visible_x->name, "x");
-  EXPECT_EQ(visible_x->declaration_node_id, outer_x_declaration->GetId());
+  EXPECT_EQ(visible_x->declaration_node, outer_x_declaration);
 }
 
 TEST(SymbolTableTests, StoresInScopeStatementIdForDeclarations) {
@@ -121,11 +121,11 @@ TEST(SymbolTableTests, StoresInScopeStatementIdForDeclarations) {
   const Parsing::Program program = Parsing::ParseSource(source);
   const Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
 
-  const Parsing::SymbolData* symbol_a = symbol_table.GetSymbolInfo("a", program);
+  const Parsing::SymbolData* symbol_a = symbol_table.GetSymbolInfo("a", &program);
   ASSERT_NE(symbol_a, nullptr);
   EXPECT_EQ(symbol_a->in_scope_stmt_id, 1u);
 
-  const Parsing::SymbolData* symbol_b = symbol_table.GetSymbolInfo("b", program);
+  const Parsing::SymbolData* symbol_b = symbol_table.GetSymbolInfo("b", &program);
   ASSERT_NE(symbol_b, nullptr);
   EXPECT_EQ(symbol_b->in_scope_stmt_id, 2u);
 
@@ -134,7 +134,7 @@ TEST(SymbolTableTests, StoresInScopeStatementIdForDeclarations) {
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
 
-  const Parsing::SymbolData* symbol_c = symbol_table.GetSymbolInfo("c", *main_function->body);
+  const Parsing::SymbolData* symbol_c = symbol_table.GetSymbolInfo("c", main_function->body.get());
   ASSERT_NE(symbol_c, nullptr);
   EXPECT_EQ(symbol_c->in_scope_stmt_id, 1u);
 }

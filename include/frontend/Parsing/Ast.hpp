@@ -1,7 +1,6 @@
 #pragma once
 
 #include <concepts>
-#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -17,41 +16,10 @@ namespace Parsing {
 #define ADD_OPERATOR_EQUAL(type) \
   friend bool operator==(const type& left, const type& right) = default;
 
-using AstNodeID = size_t;
-
 class ASTNode {
  public:
-  ASTNode()
-      : id_(next_id_++) {}
-
-  ASTNode(const ASTNode&)
-      : id_(next_id_++) {}
-
-  ASTNode(ASTNode&&) noexcept
-      : id_(next_id_++) {}
-
-  ASTNode& operator=(const ASTNode&) {
-    return *this;
-  }
-
-  ASTNode& operator=(ASTNode&&) noexcept {
-    return *this;
-  }
-
-  AstNodeID GetId() const {
-    return id_;
-  }
-
-  friend bool operator==(const ASTNode& a, const ASTNode& b) {
-    return a.id_ == b.id_;
-  }
-
- private:
-  inline static AstNodeID next_id_ = 0;
-  const AstNodeID id_;
+  friend bool operator==(const ASTNode& a, const ASTNode& b) = default;
 };
-
-inline static constexpr AstNodeID kInvalidAstNodeID = std::numeric_limits<AstNodeID>::max();
 
 template <typename T>
 using List = std::vector<std::unique_ptr<T>>;

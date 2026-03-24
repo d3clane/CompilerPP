@@ -1,7 +1,5 @@
 program = decl_stmt* ;
 
-stmt = decl_stmt | assign_stmt | print_stmt | if_stmt | return_stmt | expr_stmt | block ;
-
 decl_stmt = var_decl | func_decl ;
 
 var_decl = "var" mutable_opt ident type init_opt ";" ;
@@ -37,6 +35,8 @@ return_arg_opt = expr | \eps ;
 expr_stmt = expr ";" ;
 
 block = "{" stmt* "}" ;
+
+stmt = decl_stmt | assign_stmt | print_stmt | if_stmt | return_stmt | expr_stmt | block ;
 
 func_call = ident "(" call_args_opt ")" ;
 

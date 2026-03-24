@@ -11,34 +11,21 @@ namespace Parsing {
 
 namespace {
 
-struct LocalUse {
-  AstNodeID node_id;
-  std::string used_ident_name;
-
-  friend bool operator<(const LocalUse& left, const LocalUse& right) {
-    if (left.node_id != right.node_id) {
-      return left.node_id < right.node_id;
-    }
-
-    return left.used_ident_name < right.used_ident_name;
-  }
-};
-
 class UseResolverBuilder {
  public:
   UseResolverBuilder(const Program& program, const SymbolTable& symbol_table)
       : program_(program),
         symbol_table_(symbol_table) {}
 
-  std::map<LocalUse, AstNodeID> Build() {
+  std::map<UseResolver::Use, const ASTNode*> Build() {
     VisitStatements(program_.top_statements);
     return std::move(use_to_definition_);
   }
 
  private:
-  AstNodeID ResolveUse(
+  const ASTNode* ResolveUse(
       const std::string& name,
-      const ASTNode& use_node,
+      const ASTNode* use_node,
       size_t in_scope_stmt_id) const {
     const LocalSymbolTable* scope = symbol_table_.GetTable(use_node);
     if (scope == nullptr) {
@@ -50,7 +37,7 @@ class UseResolverBuilder {
     if (local_symbol != nullptr) {
       if (local_symbol->kind == SymbolKind::Function ||
           local_symbol->in_scope_stmt_id < in_scope_stmt_id) {
-        return local_symbol->declaration_node_id;
+        return local_symbol->declaration_node;
       }
 
       const LocalSymbolTable* parent_scope = scope->GetParent();
@@ -63,7 +50,7 @@ class UseResolverBuilder {
         throw std::runtime_error("use before def");
       }
 
-      return parent_symbol->declaration_node_id;
+      return parent_symbol->declaration_node;
     }
 
     const SymbolData* visible_symbol = scope->GetSymbolInfo(name);
@@ -71,17 +58,17 @@ class UseResolverBuilder {
       throw std::runtime_error("use before def");
     }
 
-    return visible_symbol->declaration_node_id;
+    return visible_symbol->declaration_node;
   }
 
   void RegisterUse(
-      const ASTNode& use_node,
+      const ASTNode* use_node,
       const std::string& name,
       size_t in_scope_stmt_id) {
-    const AstNodeID resolved_definition_id = ResolveUse(name, use_node, in_scope_stmt_id);
+    const ASTNode* resolved_definition_node = ResolveUse(name, use_node, in_scope_stmt_id);
     use_to_definition_.emplace(
-        LocalUse{use_node.GetId(), name},
-        resolved_definition_id);
+        UseResolver::Use{use_node, name},
+        resolved_definition_node);
   }
 
   void VisitStatements(const List<Statement>& statements) {
@@ -140,7 +127,7 @@ class UseResolverBuilder {
   void VisitAssignmentStatement(
       const AssignmentStatement& assignment,
       size_t in_scope_stmt_id) {
-    RegisterUse(assignment, assignment.variable_name, in_scope_stmt_id);
+    RegisterUse(&assignment, assignment.variable_name, in_scope_stmt_id);
 
     assert(assignment.expr != nullptr);
     VisitExpression(*assignment.expr, in_scope_stmt_id);
@@ -196,12 +183,12 @@ class UseResolverBuilder {
     std::visit(
         Utils::Overload{
             [this, in_scope_stmt_id](const IdentifierExpression& identifier_expression) {
-              RegisterUse(identifier_expression, identifier_expression.name, in_scope_stmt_id);
+              RegisterUse(&identifier_expression, identifier_expression.name, in_scope_stmt_id);
             },
             [](const LiteralExpression&) {
             },
             [this, in_scope_stmt_id](const FunctionCall& function_call) {
-              RegisterUse(function_call, function_call.function_name, in_scope_stmt_id);
+              RegisterUse(&function_call, function_call.function_name, in_scope_stmt_id);
               for (size_t i = 0; i < function_call.arguments.size(); ++i) {
                 assert(function_call.arguments[i] != nullptr);
                 VisitCallArgument(*function_call.arguments[i], in_scope_stmt_id);
@@ -222,43 +209,36 @@ class UseResolverBuilder {
 
   const Program& program_;
   const SymbolTable& symbol_table_;
-  std::map<LocalUse, AstNodeID> use_to_definition_;
+  std::map<UseResolver::Use, const ASTNode*> use_to_definition_;
 };
 
 }  // namespace
 
-AstNodeID UseResolver::GetUsedVarDef(const std::string& name, ASTNode* curr_node) const {
+const ASTNode* UseResolver::GetUsedVarDef(
+    const std::string& name,
+    const ASTNode* curr_node) const {
   if (curr_node == nullptr) {
-    return kInvalidAstNodeID;
+    return nullptr;
   }
 
-  return GetUsedVarDef(name, curr_node->GetId());
-}
-
-AstNodeID UseResolver::GetUsedVarDef(const std::string& name, AstNodeID curr_node_id) const {
   const auto definition_it =
-      use_to_definition_.find(Use{curr_node_id, std::string(name)});
+      use_to_definition_.find(Use{curr_node, std::string(name)});
   if (definition_it == use_to_definition_.end()) {
-    return kInvalidAstNodeID;
+    return nullptr;
   }
 
   return definition_it->second;
 }
 
 UseResolver BuildUseResolver(const Program& program, SymbolTable& symbol_table) {
-  if (symbol_table.GetTable(program) == nullptr) {
+  if (symbol_table.GetTable(&program) == nullptr) {
     throw std::runtime_error(
         "BuildUseResolver requires a symbol table built for the same program");
   }
 
   UseResolver resolver;
   UseResolverBuilder builder(program, symbol_table);
-  const std::map<LocalUse, AstNodeID> use_to_definition = builder.Build();
-  for (const auto& [local_use, definition_node_id] : use_to_definition) {
-    resolver.use_to_definition_.emplace(
-        UseResolver::Use{local_use.node_id, local_use.used_ident_name},
-        definition_node_id);
-  }
+  resolver.use_to_definition_ = builder.Build();
 
   return resolver;
 }

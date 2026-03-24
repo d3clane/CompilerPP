@@ -37,12 +37,12 @@ TEST(InterpreterTests, ExecutesIntAndBoolBranches) {
   EXPECT_EQ(output.str(), "5\nfalse\n");
   ASSERT_NE(x_declaration, nullptr);
   ASSERT_NE(flag_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(x_declaration), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 5);
-  ASSERT_EQ(context.variables.count(flag_declaration->GetId()), 1);
-  const auto* flag_value = std::get_if<bool>(&context.variables.at(flag_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(flag_declaration), 1);
+  const auto* flag_value = std::get_if<bool>(&context.variables.at(flag_declaration));
   ASSERT_NE(flag_value, nullptr);
   EXPECT_FALSE(*flag_value);
 }
@@ -59,8 +59,8 @@ TEST(InterpreterTests, ExecutesFalseBranchAndKeepsOrder) {
 
   EXPECT_EQ(output.str(), "-1\n2\n");
   ASSERT_NE(x_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(x_declaration), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 2);
 }
@@ -77,8 +77,8 @@ TEST(InterpreterTests, ExecutesElseIfBranch) {
 
   EXPECT_EQ(output.str(), "1\n7\n");
   ASSERT_NE(x_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(x_declaration), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 7);
 }
@@ -95,8 +95,8 @@ TEST(InterpreterTests, ExecutesMultipleElseIfBranches) {
 
   EXPECT_EQ(output.str(), "2\n9\n");
   ASSERT_NE(x_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(x_declaration), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 9);
 }
@@ -113,8 +113,8 @@ TEST(InterpreterTests, ExecutesIfWithoutElseAndSkipsBodyWhenFalse) {
 
   EXPECT_EQ(output.str(), "3\n");
   ASSERT_NE(x_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(x_declaration), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 3);
 }
@@ -131,8 +131,8 @@ TEST(InterpreterTests, ExecutesIfWithoutElseWhenConditionIsTrue) {
 
   EXPECT_EQ(output.str(), "7\n8\n");
   ASSERT_NE(x_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(x_declaration), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, 8);
 }
@@ -152,12 +152,12 @@ TEST(InterpreterTests, EvaluatesArithmeticExpressionsWithPrecedence) {
   EXPECT_EQ(output.str(), "16\n26\n-9\n222\n");
   ASSERT_NE(x_declaration, nullptr);
   ASSERT_NE(y_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(x_declaration->GetId()), 1);
-  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(x_declaration), 1);
+  const auto* x_value = std::get_if<int>(&context.variables.at(x_declaration));
   ASSERT_NE(x_value, nullptr);
   EXPECT_EQ(*x_value, -9);
-  ASSERT_EQ(context.variables.count(y_declaration->GetId()), 1);
-  const auto* y_value = std::get_if<int>(&context.variables.at(y_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(y_declaration), 1);
+  const auto* y_value = std::get_if<int>(&context.variables.at(y_declaration));
   ASSERT_NE(y_value, nullptr);
   EXPECT_EQ(*y_value, 3);
 }
@@ -177,12 +177,12 @@ TEST(InterpreterTests, EvaluatesBooleanLogic) {
   EXPECT_EQ(output.str(), "true\n");
   ASSERT_NE(a_declaration, nullptr);
   ASSERT_NE(b_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(a_declaration->GetId()), 1);
-  const auto* a_value = std::get_if<bool>(&context.variables.at(a_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(a_declaration), 1);
+  const auto* a_value = std::get_if<bool>(&context.variables.at(a_declaration));
   ASSERT_NE(a_value, nullptr);
   EXPECT_TRUE(*a_value);
-  ASSERT_EQ(context.variables.count(b_declaration->GetId()), 1);
-  const auto* b_value = std::get_if<bool>(&context.variables.at(b_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(b_declaration), 1);
+  const auto* b_value = std::get_if<bool>(&context.variables.at(b_declaration));
   ASSERT_NE(b_value, nullptr);
   EXPECT_FALSE(*b_value);
 }
@@ -202,12 +202,12 @@ TEST(InterpreterTests, SupportsBoolAssignmentFromIdentifier) {
   EXPECT_EQ(output.str(), "true\n");
   ASSERT_NE(a_declaration, nullptr);
   ASSERT_NE(b_declaration, nullptr);
-  ASSERT_EQ(context.variables.count(a_declaration->GetId()), 1);
-  const auto* a_value = std::get_if<bool>(&context.variables.at(a_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(a_declaration), 1);
+  const auto* a_value = std::get_if<bool>(&context.variables.at(a_declaration));
   ASSERT_NE(a_value, nullptr);
   EXPECT_TRUE(*a_value);
-  ASSERT_EQ(context.variables.count(b_declaration->GetId()), 1);
-  const auto* b_value = std::get_if<bool>(&context.variables.at(b_declaration->GetId()));
+  ASSERT_EQ(context.variables.count(b_declaration), 1);
+  const auto* b_value = std::get_if<bool>(&context.variables.at(b_declaration));
   ASSERT_NE(b_value, nullptr);
   EXPECT_TRUE(*b_value);
 }
@@ -245,18 +245,18 @@ TEST(InterpreterTests, UsesOuterVariableInInitializerBeforeInnerShadowing) {
   ASSERT_NE(inner_x_declaration, nullptr);
 
   EXPECT_EQ(output.str(), "2\n0\n");
-  ASSERT_EQ(context.variables.count(outer_x_declaration->GetId()), 1);
-  ASSERT_EQ(context.variables.count(y_declaration->GetId()), 1);
-  ASSERT_EQ(context.variables.count(inner_x_declaration->GetId()), 1);
+  ASSERT_EQ(context.variables.count(outer_x_declaration), 1);
+  ASSERT_EQ(context.variables.count(y_declaration), 1);
+  ASSERT_EQ(context.variables.count(inner_x_declaration), 1);
   const auto* outer_x_value =
-      std::get_if<int>(&context.variables.at(outer_x_declaration->GetId()));
+      std::get_if<int>(&context.variables.at(outer_x_declaration));
   ASSERT_NE(outer_x_value, nullptr);
   EXPECT_EQ(*outer_x_value, 0);
-  const auto* y_value = std::get_if<int>(&context.variables.at(y_declaration->GetId()));
+  const auto* y_value = std::get_if<int>(&context.variables.at(y_declaration));
   ASSERT_NE(y_value, nullptr);
   EXPECT_EQ(*y_value, 2);
   const auto* inner_x_value =
-      std::get_if<int>(&context.variables.at(inner_x_declaration->GetId()));
+      std::get_if<int>(&context.variables.at(inner_x_declaration));
   ASSERT_NE(inner_x_value, nullptr);
   EXPECT_EQ(*inner_x_value, 10);
 }
@@ -289,14 +289,14 @@ TEST(InterpreterTests, AssignmentInsideShadowingBlockDoesNotModifyOuterVariable)
   ASSERT_NE(inner_x_declaration, nullptr);
 
   EXPECT_EQ(output.str(), "1\n");
-  ASSERT_EQ(context.variables.count(outer_x_declaration->GetId()), 1);
-  ASSERT_EQ(context.variables.count(inner_x_declaration->GetId()), 1);
+  ASSERT_EQ(context.variables.count(outer_x_declaration), 1);
+  ASSERT_EQ(context.variables.count(inner_x_declaration), 1);
   const auto* outer_x_value =
-      std::get_if<int>(&context.variables.at(outer_x_declaration->GetId()));
+      std::get_if<int>(&context.variables.at(outer_x_declaration));
   ASSERT_NE(outer_x_value, nullptr);
   EXPECT_EQ(*outer_x_value, 1);
   const auto* inner_x_value =
-      std::get_if<int>(&context.variables.at(inner_x_declaration->GetId()));
+      std::get_if<int>(&context.variables.at(inner_x_declaration));
   ASSERT_NE(inner_x_value, nullptr);
   EXPECT_EQ(*inner_x_value, 3);
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <map>
 #include <string>
 
@@ -10,26 +11,25 @@ namespace Parsing {
 
 class UseResolver {
  public:
-  AstNodeID GetUsedVarDef(const std::string& name, ASTNode* curr_node) const;
-  AstNodeID GetUsedVarDef(const std::string& name, AstNodeID curr_node_id) const;
-
- private:
-  UseResolver() = default;
-
   struct Use {
-    AstNodeID node_id;
+    const ASTNode* node;
     std::string used_ident_name;
 
     friend bool operator<(const Use& left, const Use& right) {
-      if (left.node_id != right.node_id) {
-        return left.node_id < right.node_id;
+      if (left.node != right.node) {
+        return std::less<const ASTNode*>{}(left.node, right.node);
       }
 
       return left.used_ident_name < right.used_ident_name;
     }
   };
 
-  std::map<Use, AstNodeID> use_to_definition_;
+  const ASTNode* GetUsedVarDef(const std::string& name, const ASTNode* curr_node) const;
+
+ private:
+  UseResolver() = default;
+
+  std::map<Use, const ASTNode*> use_to_definition_;
 
   friend UseResolver BuildUseResolver(
       const Program& program,

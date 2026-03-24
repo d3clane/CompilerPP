@@ -53,11 +53,11 @@ TEST(ResolverTests, ResolvesOuterVariableForInitializerBeforeInnerShadowingDecla
   ASSERT_NE(used_identifier, nullptr);
 
   EXPECT_EQ(
-      resolver.GetUsedVarDef("x", const_cast<Parsing::IdentifierExpression*>(used_identifier)),
-      outer_x_declaration->GetId());
+      resolver.GetUsedVarDef("x", used_identifier),
+      outer_x_declaration);
   EXPECT_EQ(
-      resolver.GetUsedVarDef("x", used_identifier->GetId()),
-      outer_x_declaration->GetId());
+      resolver.GetUsedVarDef("x", used_identifier),
+      outer_x_declaration);
 }
 
 TEST(ResolverTests, ResolvesInnerShadowedVariableInsideBlock) {
@@ -90,8 +90,8 @@ TEST(ResolverTests, ResolvesInnerShadowedVariableInsideBlock) {
   ASSERT_NE(used_identifier, nullptr);
 
   EXPECT_EQ(
-      resolver.GetUsedVarDef("x", const_cast<Parsing::IdentifierExpression*>(used_identifier)),
-      inner_x_declaration->GetId());
+      resolver.GetUsedVarDef("x", used_identifier),
+      inner_x_declaration);
 }
 
 TEST(ResolverTests, ThrowsOnUseBeforeDefinitionWithoutOuterDeclaration) {
@@ -139,11 +139,11 @@ TEST(ResolverTests, ResolvesAssignmentTargetAndRhsIdentifierToInnerDeclaration) 
   ASSERT_NE(rhs_identifier, nullptr);
 
   EXPECT_EQ(
-      resolver.GetUsedVarDef("x", const_cast<Parsing::AssignmentStatement*>(assignment_statement)),
-      inner_x_declaration->GetId());
+      resolver.GetUsedVarDef("x", assignment_statement),
+      inner_x_declaration);
   EXPECT_EQ(
-      resolver.GetUsedVarDef("x", const_cast<Parsing::IdentifierExpression*>(rhs_identifier)),
-      inner_x_declaration->GetId());
+      resolver.GetUsedVarDef("x", rhs_identifier),
+      inner_x_declaration);
 }
 
 TEST(ResolverTests, ResolvesFunctionCallBeforeFunctionDefinitionInSameScope) {
@@ -179,11 +179,11 @@ TEST(ResolverTests, ResolvesFunctionCallBeforeFunctionDefinitionInSameScope) {
   ASSERT_NE(function_declaration, nullptr);
 
   EXPECT_EQ(
-      resolver.GetUsedVarDef("foo", const_cast<Parsing::FunctionCall*>(function_call)),
-      function_declaration->GetId());
+      resolver.GetUsedVarDef("foo", function_call),
+      function_declaration);
   EXPECT_EQ(
-      resolver.GetUsedVarDef("foo", function_call->GetId()),
-      function_declaration->GetId());
+      resolver.GetUsedVarDef("foo", function_call),
+      function_declaration);
 }
 
 }  // namespace

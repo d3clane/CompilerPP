@@ -70,31 +70,23 @@ LocalSymbolTable& SymbolTable::CreateLocalTable(LocalSymbolTable* parent) {
   return *owned_tables_.back();
 }
 
-void SymbolTable::AddTable(AstNodeID node_id, LocalSymbolTable& table) {
-  table_by_node_id_[node_id] = &table;
+void SymbolTable::AddTable(const ASTNode* node, LocalSymbolTable& table) {
+  table_by_node_[node] = &table;
 }
 
-void SymbolTable::AddTable(const ASTNode& node, LocalSymbolTable& table) {
-  AddTable(node.GetId(), table);
-}
-
-const LocalSymbolTable* SymbolTable::GetTable(AstNodeID node_id) const {
-  const auto table_it = table_by_node_id_.find(node_id);
-  if (table_it == table_by_node_id_.end()) {
+const LocalSymbolTable* SymbolTable::GetTable(const ASTNode* node) const {
+  const auto table_it = table_by_node_.find(node);
+  if (table_it == table_by_node_.end()) {
     return nullptr;
   }
 
   return table_it->second;
 }
 
-const LocalSymbolTable* SymbolTable::GetTable(const ASTNode& node) const {
-  return GetTable(node.GetId());
-}
-
 const SymbolData* SymbolTable::GetSymbolInfoInLocalScope(
     const std::string& name,
-    AstNodeID node_id) const {
-  const LocalSymbolTable* scope = GetTable(node_id);
+    const ASTNode* node) const {
+  const LocalSymbolTable* scope = GetTable(node);
   if (scope == nullptr) {
     return nullptr;
   }
@@ -102,16 +94,10 @@ const SymbolData* SymbolTable::GetSymbolInfoInLocalScope(
   return scope->GetSymbolInfoInLocalScope(name);
 }
 
-const SymbolData* SymbolTable::GetSymbolInfoInLocalScope(
-    const std::string& name,
-    const ASTNode& node) const {
-  return GetSymbolInfoInLocalScope(name, node.GetId());
-}
-
 const SymbolData* SymbolTable::GetSymbolInfo(
     const std::string& name,
-    AstNodeID node_id) const {
-  const LocalSymbolTable* scope = GetTable(node_id);
+    const ASTNode* node) const {
+  const LocalSymbolTable* scope = GetTable(node);
   if (scope == nullptr) {
     return nullptr;
   }
@@ -119,18 +105,12 @@ const SymbolData* SymbolTable::GetSymbolInfo(
   return scope->GetSymbolInfo(name);
 }
 
-const SymbolData* SymbolTable::GetSymbolInfo(
-    const std::string& name,
-    const ASTNode& node) const {
-  return GetSymbolInfo(name, node.GetId());
-}
-
 namespace {
 
 class SymbolTableBuilder {
  public:
   SymbolTable Build(const Program& program) {
-    EnterScope(program);
+    EnterScope(&program);
 
     for (size_t i = 0; i < program.top_statements.size(); ++i) {
       assert(program.top_statements[i] != nullptr);
@@ -156,7 +136,7 @@ class SymbolTableBuilder {
     return *scope_stack_.back();
   }
 
-  LocalSymbolTable& EnterScope(const ASTNode& owner_node) {
+  LocalSymbolTable& EnterScope(const ASTNode* owner_node) {
     LocalSymbolTable* parent = nullptr;
     if (!scope_stack_.empty()) {
       parent = scope_stack_.back();
@@ -177,13 +157,13 @@ class SymbolTableBuilder {
     scope_stack_.pop_back();
   }
 
-  void RegisterNode(const ASTNode& node) {
+  void RegisterNode(const ASTNode* node) {
     symbol_table_.AddTable(node, CurrentScope());
   }
 
   void VisitStatement(const Statement& statement) {
     current_statement_id_ = AcquireNextInScopeStatementId();
-    RegisterNode(statement);
+    RegisterNode(&statement);
     std::visit(
         Utils::Overload{
             [this](const DeclarationStatement& declaration) {
@@ -214,7 +194,7 @@ class SymbolTableBuilder {
   }
 
   void VisitDeclarationStatement(const DeclarationStatement& declaration) {
-    RegisterNode(declaration);
+    RegisterNode(&declaration);
     if (declaration.initializer != nullptr) {
       VisitExpression(*declaration.initializer);
     }
@@ -224,14 +204,14 @@ class SymbolTableBuilder {
         declaration.variable_name,
         declaration.is_mutable,
         SymbolDebugInfo{"variable declaration"},
-        declaration.GetId(),
+        &declaration,
         current_statement_id_,
         SymbolKind::Variable});
   }
 
   void VisitFunctionDeclarationStatement(
       const FunctionDeclarationStatement& function_declaration) {
-    RegisterNode(function_declaration);
+    RegisterNode(&function_declaration);
     assert(function_declaration.body != nullptr);
 
     FuncType function_type;
@@ -248,20 +228,20 @@ class SymbolTableBuilder {
         function_declaration.function_name,
         false,
         SymbolDebugInfo{"function declaration"},
-        function_declaration.GetId(),
+        &function_declaration,
         current_statement_id_,
         SymbolKind::Function});
 
-    EnterScope(*function_declaration.body);
+    EnterScope(function_declaration.body.get());
 
     for (size_t i = 0; i < function_declaration.parameters.size(); ++i) {
-      RegisterNode(function_declaration.parameters[i]);
+      RegisterNode(&function_declaration.parameters[i]);
       CurrentScope().AddSymbolInfo(SymbolData{
           function_declaration.parameters[i].type,
           function_declaration.parameters[i].name,
           false,
           SymbolDebugInfo{"function parameter"},
-          function_declaration.parameters[i].GetId(),
+          &function_declaration.parameters[i],
           0,
           SymbolKind::Parameter});
     }
@@ -275,19 +255,19 @@ class SymbolTableBuilder {
   }
 
   void VisitAssignmentStatement(const AssignmentStatement& assignment) {
-    RegisterNode(assignment);
+    RegisterNode(&assignment);
     assert(assignment.expr != nullptr);
     VisitExpression(*assignment.expr);
   }
 
   void VisitPrintStatement(const PrintStatement& print_statement) {
-    RegisterNode(print_statement);
+    RegisterNode(&print_statement);
     assert(print_statement.expr != nullptr);
     VisitExpression(*print_statement.expr);
   }
 
   void VisitIfStatement(const IfStatement& if_statement) {
-    RegisterNode(if_statement);
+    RegisterNode(&if_statement);
     assert(if_statement.condition != nullptr);
     assert(if_statement.true_block != nullptr);
     assert(if_statement.else_tail != nullptr);
@@ -298,7 +278,7 @@ class SymbolTableBuilder {
   }
 
   void VisitElseTail(const ElseTail& else_tail) {
-    RegisterNode(else_tail);
+    RegisterNode(&else_tail);
     assert(!(else_tail.else_if != nullptr && else_tail.else_block != nullptr));
 
     if (else_tail.else_if != nullptr) {
@@ -312,14 +292,14 @@ class SymbolTableBuilder {
   }
 
   void VisitReturnStatement(const ReturnStatement& return_statement) {
-    RegisterNode(return_statement);
+    RegisterNode(&return_statement);
     if (return_statement.expr != nullptr) {
       VisitExpression(*return_statement.expr);
     }
   }
 
   void VisitBlock(const Block& block) {
-    EnterScope(block);
+    EnterScope(&block);
     for (size_t i = 0; i < block.statements.size(); ++i) {
       assert(block.statements[i] != nullptr);
       VisitStatement(*block.statements[i]);
@@ -328,24 +308,24 @@ class SymbolTableBuilder {
   }
 
   void VisitExpression(const Expression& expression) {
-    RegisterNode(expression);
+    RegisterNode(&expression);
     std::visit(
         Utils::Overload{
             [this](const IdentifierExpression& identifier_expression) {
-              RegisterNode(identifier_expression);
+              RegisterNode(&identifier_expression);
             },
             [this](const LiteralExpression& literal_expression) {
-              RegisterNode(literal_expression);
+              RegisterNode(&literal_expression);
             },
             [this](const FunctionCall& function_call) {
-              RegisterNode(function_call);
+              RegisterNode(&function_call);
 
               for (size_t i = 0; i < function_call.arguments.size(); ++i) {
                 assert(function_call.arguments[i] != nullptr);
                 std::visit(
                     Utils::Overload{
                         [this](const auto& argument) {
-                          RegisterNode(argument);
+                          RegisterNode(&argument);
                           assert(argument.value != nullptr);
                           VisitExpression(*argument.value);
                         }},
@@ -362,13 +342,13 @@ class SymbolTableBuilder {
   }
 
   void VisitUnaryExpressionNode(const UnaryOperationBase& unary_expression) {
-    RegisterNode(unary_expression);
+    RegisterNode(&unary_expression);
     assert(unary_expression.operand != nullptr);
     VisitExpression(*unary_expression.operand);
   }
 
   void VisitBinaryExpressionNode(const BinaryOperationBase& binary_expression) {
-    RegisterNode(binary_expression);
+    RegisterNode(&binary_expression);
     assert(binary_expression.left != nullptr);
     assert(binary_expression.right != nullptr);
     VisitExpression(*binary_expression.left);

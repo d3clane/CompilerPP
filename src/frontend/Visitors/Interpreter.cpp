@@ -29,17 +29,17 @@ struct InterpreterRuntime {
   const UseResolver& use_resolver;
 };
 
-AstNodeID ResolveVariableDefinitionId(
+const ASTNode* ResolveVariableDefinitionNode(
     const std::string& name,
-    const ASTNode& use_node,
+    const ASTNode* use_node,
     const UseResolver& use_resolver,
     const std::string& missing_symbol_error_prefix) {
-  const AstNodeID definition_id = use_resolver.GetUsedVarDef(name, use_node.GetId());
-  if (definition_id == kInvalidAstNodeID) {
+  const ASTNode* definition_node = use_resolver.GetUsedVarDef(name, use_node);
+  if (definition_node == nullptr) {
     throw std::runtime_error(missing_symbol_error_prefix + name);
   }
 
-  return definition_id;
+  return definition_node;
 }
 
 RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterRuntime& runtime);
@@ -61,12 +61,12 @@ RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterR
             return literal.value;
           },
           [&runtime](const IdentifierExpression& identifier) -> RuntimeValue {
-            const AstNodeID definition_id = ResolveVariableDefinitionId(
+            const ASTNode* definition_node = ResolveVariableDefinitionNode(
                 identifier.name,
-                identifier,
+                &identifier,
                 runtime.use_resolver,
                 "Unknown variable: ");
-            const auto variable_it = runtime.context.variables.find(definition_id);
+            const auto variable_it = runtime.context.variables.find(definition_node);
             if (variable_it == runtime.context.variables.end()) {
               throw std::runtime_error("Unknown variable: " + identifier.name);
             }
@@ -190,7 +190,7 @@ RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterR
 void ExecuteBlock(const Block& block, InterpreterRuntime& runtime, std::ostream& output);
 
 void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRuntime& runtime) {
-  if (runtime.context.variables.find(declaration.GetId()) != runtime.context.variables.end()) {
+  if (runtime.context.variables.find(&declaration) != runtime.context.variables.end()) {
     throw std::runtime_error("Variable already declared: " + declaration.variable_name);
   }
 
@@ -200,7 +200,7 @@ void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRunt
       value = EvaluateExpression(*declaration.initializer, runtime);
     }
 
-    runtime.context.variables.emplace(declaration.GetId(), value);
+    runtime.context.variables.emplace(&declaration, value);
     return;
   }
 
@@ -210,7 +210,7 @@ void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRunt
       value = EvaluateExpression(*declaration.initializer, runtime);
     }
 
-    runtime.context.variables.emplace(declaration.GetId(), value);
+    runtime.context.variables.emplace(&declaration, value);
     return;
   }
 
@@ -220,12 +220,12 @@ void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRunt
 void ExecuteAssignment(const AssignmentStatement& assignment, InterpreterRuntime& runtime) {
   assert(assignment.expr != nullptr);
 
-  const AstNodeID definition_id = ResolveVariableDefinitionId(
+  const ASTNode* definition_node = ResolveVariableDefinitionNode(
       assignment.variable_name,
-      assignment,
+      &assignment,
       runtime.use_resolver,
       "Variable is not declared before assignment: ");
-  auto variable_it = runtime.context.variables.find(definition_id);
+  auto variable_it = runtime.context.variables.find(definition_node);
   if (variable_it == runtime.context.variables.end()) {
     throw std::runtime_error(
         "Variable is not declared before assignment: " + assignment.variable_name);
