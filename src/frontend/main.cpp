@@ -3,8 +3,11 @@
 #include <iterator>
 #include <string>
 
-#include "Visitors/Interpreter.hpp"
 #include "Parsing/Parser.hpp"
+#include "SemanticAnalysis/Resolver.hpp"
+#include "SemanticAnalysis/SymbolTable.hpp"
+#include "SemanticAnalysis/TypeChecker.hpp"
+#include "Visitors/Interpreter.hpp"
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
@@ -25,6 +28,10 @@ int main(int argc, char* argv[]) {
 
   try {
     const Parsing::Program program = Parsing::ParseSource(source);
+    Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+    const Parsing::UseResolver use_resolver =
+        Parsing::BuildUseResolver(program, symbol_table);
+    Parsing::CheckTypes(program, use_resolver, symbol_table);
     Parsing::Interpret(program, std::cout);
   } catch (const std::exception& error) {
     std::cerr << "Error: " << error.what() << "\n";
