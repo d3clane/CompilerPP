@@ -220,11 +220,12 @@ class SymbolTableBuilder {
     }
 
     if (function_declaration.return_type.has_value()) {
-      function_type.return_type = *function_declaration.return_type;
+      function_type.return_type =
+          std::make_unique<Type>(*function_declaration.return_type);
     }
 
     CurrentScope().AddSymbolInfo(SymbolData{
-        Type{std::make_shared<FuncType>(std::move(function_type))},
+        Type{std::move(function_type)},
         function_declaration.function_name,
         false,
         SymbolDebugInfo{"function declaration"},

@@ -5,6 +5,7 @@
 #include <string>
 #include <variant>
 
+#include "SemanticAnalysis/SymbolTable.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -189,6 +190,13 @@ class UseResolverBuilder {
             },
             [this, in_scope_stmt_id](const FunctionCall& function_call) {
               RegisterUse(&function_call, function_call.function_name, in_scope_stmt_id);
+              
+              const SymbolData* data = symbol_table_.GetSymbolInfo(function_call.function_name, &function_call);
+              assert(data != nullptr);
+              if (data->kind != SymbolKind::Function) {
+                throw std::runtime_error("called object is not a function: " + function_call.function_name);
+              }
+
               for (size_t i = 0; i < function_call.arguments.size(); ++i) {
                 assert(function_call.arguments[i] != nullptr);
                 VisitCallArgument(*function_call.arguments[i], in_scope_stmt_id);

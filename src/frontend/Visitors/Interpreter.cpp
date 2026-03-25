@@ -194,7 +194,7 @@ void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRunt
     throw std::runtime_error("Variable already declared: " + declaration.variable_name);
   }
 
-  if (std::holds_alternative<IntType>(declaration.type)) {
+  if (std::holds_alternative<IntType>(declaration.type.type)) {
     RuntimeValue value{0};
     if (declaration.initializer != nullptr) {
       value = EvaluateExpression(*declaration.initializer, runtime);
@@ -204,7 +204,7 @@ void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRunt
     return;
   }
 
-  if (std::holds_alternative<BoolType>(declaration.type)) {
+  if (std::holds_alternative<BoolType>(declaration.type.type)) {
     RuntimeValue value{false};
     if (declaration.initializer != nullptr) {
       value = EvaluateExpression(*declaration.initializer, runtime);

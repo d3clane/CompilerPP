@@ -1,7 +1,6 @@
 #include "Visitors/Printer.hpp"
 
 #include <cassert>
-#include <type_traits>
 
 #include "Utils/Overload.hpp"
 
@@ -114,24 +113,23 @@ std::string PrintType(const Type& type) {
       Utils::Overload{
           [](const IntType&) -> std::string { return "int"; },
           [](const BoolType&) -> std::string { return "bool"; },
-          [](const std::shared_ptr<FuncType>& func_type) -> std::string {
-            assert(func_type != nullptr);
+          [](const FuncType& func_type) -> std::string {
             std::string result = "func(";
-            for (size_t i = 0; i < func_type->parameter_types.size(); ++i) {
-              result += PrintType(func_type->parameter_types[i]);
-              if (i + 1 < func_type->parameter_types.size()) {
+            for (size_t i = 0; i < func_type.parameter_types.size(); ++i) {
+              result += PrintType(func_type.parameter_types[i]);
+              if (i + 1 < func_type.parameter_types.size()) {
                 result += ", ";
               }
             }
             result += ")";
 
-            if (func_type->return_type.has_value()) {
-              result += " -> " + PrintType(*func_type->return_type);
+            if (func_type.return_type != nullptr) {
+              result += " -> " + PrintType(*func_type.return_type);
             }
 
             return result;
           }},
-      type);
+      type.type);
 }
 
 int GetPrecedence(const Expression& expression) {

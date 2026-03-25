@@ -41,7 +41,7 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
       std::get_if<Parsing::DeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(declaration, nullptr);
   EXPECT_EQ(declaration->variable_name, "x");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(declaration->type));
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(declaration->type.type));
   EXPECT_FALSE(declaration->is_mutable);
   EXPECT_EQ(declaration->initializer, nullptr);
 
@@ -351,11 +351,11 @@ TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
   EXPECT_EQ(function_decl->function_name, "foo");
   ASSERT_EQ(function_decl->parameters.size(), 2);
   EXPECT_EQ(function_decl->parameters[0].name, "a");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->parameters[0].type));
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->parameters[0].type.type));
   EXPECT_EQ(function_decl->parameters[1].name, "b");
-  EXPECT_TRUE(std::holds_alternative<Parsing::BoolType>(function_decl->parameters[1].type));
+  EXPECT_TRUE(std::holds_alternative<Parsing::BoolType>(function_decl->parameters[1].type.type));
   ASSERT_TRUE(function_decl->return_type.has_value());
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(*function_decl->return_type));
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->return_type->type));
   ASSERT_NE(function_decl->body, nullptr);
   ASSERT_EQ(function_decl->body->statements.size(), 1);
 
