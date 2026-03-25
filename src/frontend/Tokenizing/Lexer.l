@@ -195,8 +195,8 @@ IDENT_BODY [A-Za-z0-9_]
                   BEGIN(RECOVER);
                 }
 
-<RECOVER>WHITESPACE { BEGIN(INITIAL); }
-<RECOVER>.          { AdvancePosition(yytext, yyleng); }
+<RECOVER>{WHITESPACE} { BEGIN(INITIAL); }
+<RECOVER>.            { AdvancePosition(yytext, yyleng); }
 %%
 
 namespace Tokenizing {

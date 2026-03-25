@@ -1,12 +1,10 @@
 #include "Parsing/Parser.hpp"
 
-#include <stdexcept>
 #include <vector>
 
 #include "BisonParser.hpp"
 #include "Debug/Debug.hpp"
-#include "Debug/Errors.hpp"
-#include "Tokenizing/Lexer.hpp"
+#include "Debug/DebugCtx.hpp"
 
 namespace Parsing {
 
@@ -14,17 +12,17 @@ namespace {
 
 Program ParseTokensImpl(
     const std::vector<Tokenizing::TokenVariant>& tokens,
+    DebugCtx& debug_ctx,
     const std::vector<DebugInfo>* token_debug_infos,
-    FrontendErrors* errors,
-    const std::string& filename,
     size_t input_size) {
+  FrontendErrors& errors = debug_ctx.GetErrors();
   Program parsed_program;
   ParserState parser_state{
       tokens,
       0,
       token_debug_infos,
-      errors,
-      filename,
+      &errors,
+      debug_ctx.GetFilename(),
       input_size,
       std::vector<PendingErrorState>()};
 
@@ -32,14 +30,13 @@ Program ParseTokensImpl(
   const int parse_status = parser.parse();
 
   if (parse_status != 0) {
-    if (errors != nullptr && errors->HasErrors()) {
-      errors->ThrowErrors();
-    }
-    throw std::runtime_error("Parsing failed");
-  }
-
-  if (errors != nullptr && errors->HasErrors()) {
-    errors->ThrowErrors();
+    errors.AddError(
+        CreateDebugInfo(
+            debug_ctx.GetFilename(),
+            {0, 0},
+            {0, 0},
+            {0, input_size}),
+        "Parsing failed");
   }
 
   return parsed_program;
@@ -47,28 +44,12 @@ Program ParseTokensImpl(
 
 }  // namespace
 
-Program ParseTokens(const std::vector<Tokenizing::TokenVariant>& tokens) {
-  return ParseTokensImpl(tokens, nullptr, nullptr, "<tokens>", 0);
-}
-
-Program ParseSource(const std::string& source, const std::string& filename) {
-  ASTDebugInfo ast_debug_info;
-  ast_debug_info.SetInputCode(source);
-  FrontendErrors frontend_errors(ast_debug_info);
-  frontend_errors.SetLimit(50);
-  std::vector<DebugInfo> token_debug_infos;
-  const std::vector<Tokenizing::TokenVariant> tokens =
-      Tokenizing::Tokenize(
-          source,
-          filename,
-          &frontend_errors,
-          &token_debug_infos);
-  return ParseTokensImpl(
-      tokens,
-      &token_debug_infos,
-      &frontend_errors,
-      filename,
-      source.size());
+Program ParseTokens(
+    const std::vector<Tokenizing::TokenVariant>& tokens,
+    DebugCtx& debug_ctx,
+    const std::vector<DebugInfo>* token_debug_infos,
+    size_t input_size) {
+  return ParseTokensImpl(tokens, debug_ctx, token_debug_infos, input_size);
 }
 
 }  // namespace Parsing

@@ -5,6 +5,7 @@
 #include "Parsing/Ast.hpp"
 #include "Parsing/Parser.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
+#include "TestParseUtils.hpp"
 
 namespace {
 

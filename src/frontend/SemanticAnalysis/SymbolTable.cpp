@@ -1,10 +1,10 @@
 #include "SemanticAnalysis/SymbolTable.hpp"
 
 #include <cassert>
-#include <stdexcept>
 #include <utility>
 #include <variant>
 
+#include "Debug/DebugCtx.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -47,18 +47,19 @@ const SymbolData* LocalSymbolTable::GetSymbolInfo(const std::string& name) const
   return parent_->GetSymbolInfo(name);
 }
 
-void LocalSymbolTable::AddSymbolInfo(SymbolData symbol_data) {
+LocalSymbolTable::ErrorMsg LocalSymbolTable::AddSymbolInfo(SymbolData symbol_data) {
   if (GetSymbolInfoInLocalScope(symbol_data.name) != nullptr) {
-    throw std::runtime_error("Duplicate declaration in the same scope: " + symbol_data.name);
+    return "Duplicate declaration in the same scope: " + symbol_data.name;
   }
 
   const SymbolData* visible_parent_symbol = GetVisibleSymbolInParents(symbol_data.name);
   if (visible_parent_symbol != nullptr &&
       !SymbolData::CanBeShadowed(*visible_parent_symbol)) {
-    throw std::runtime_error("Symbol cannot be shadowed: " + symbol_data.name);
+    return "Symbol cannot be shadowed: " + symbol_data.name;
   }
 
   symbols_.emplace(symbol_data.name, std::move(symbol_data));
+  return {};
 }
 
 LocalSymbolTable* LocalSymbolTable::GetParent() const {
@@ -109,6 +110,9 @@ namespace {
 
 class SymbolTableBuilder {
  public:
+  explicit SymbolTableBuilder(DebugCtx& debug_ctx)
+      : debug_ctx_(debug_ctx) {}
+
   SymbolTable Build(const Program& program) {
     EnterScope(&program);
 
@@ -161,6 +165,14 @@ class SymbolTableBuilder {
     symbol_table_.AddTable(node, CurrentScope());
   }
 
+  void TryAddSymbolInfo(const ASTNode* node, SymbolData symbol_data) {
+    const LocalSymbolTable::ErrorMsg error_msg =
+        CurrentScope().AddSymbolInfo(std::move(symbol_data));
+    if (!error_msg.empty()) {
+      debug_ctx_.GetErrors().AddError(node, error_msg);
+    }
+  }
+
   void VisitStatement(const Statement& statement) {
     current_statement_id_ = AcquireNextInScopeStatementId();
     RegisterNode(&statement);
@@ -199,14 +211,16 @@ class SymbolTableBuilder {
       VisitExpression(*declaration.initializer);
     }
 
-    CurrentScope().AddSymbolInfo(SymbolData{
-        declaration.type,
-        declaration.variable_name,
-        declaration.is_mutable,
-        SymbolDebugInfo{"variable declaration"},
+    TryAddSymbolInfo(
         &declaration,
-        current_statement_id_,
-        SymbolKind::Variable});
+        SymbolData{
+            declaration.type,
+            declaration.variable_name,
+            declaration.is_mutable,
+            SymbolDebugInfo{"variable declaration"},
+            &declaration,
+            current_statement_id_,
+            SymbolKind::Variable});
   }
 
   void VisitFunctionDeclarationStatement(
@@ -224,27 +238,31 @@ class SymbolTableBuilder {
           std::make_unique<Type>(*function_declaration.return_type);
     }
 
-    CurrentScope().AddSymbolInfo(SymbolData{
-        Type{std::move(function_type)},
-        function_declaration.function_name,
-        false,
-        SymbolDebugInfo{"function declaration"},
+    TryAddSymbolInfo(
         &function_declaration,
-        current_statement_id_,
-        SymbolKind::Function});
+        SymbolData{
+            Type{std::move(function_type)},
+            function_declaration.function_name,
+            false,
+            SymbolDebugInfo{"function declaration"},
+            &function_declaration,
+            current_statement_id_,
+            SymbolKind::Function});
 
     EnterScope(function_declaration.body.get());
 
     for (size_t i = 0; i < function_declaration.parameters.size(); ++i) {
       RegisterNode(&function_declaration.parameters[i]);
-      CurrentScope().AddSymbolInfo(SymbolData{
-          function_declaration.parameters[i].type,
-          function_declaration.parameters[i].name,
-          false,
-          SymbolDebugInfo{"function parameter"},
+      TryAddSymbolInfo(
           &function_declaration.parameters[i],
-          0,
-          SymbolKind::Parameter});
+          SymbolData{
+              function_declaration.parameters[i].type,
+              function_declaration.parameters[i].name,
+              false,
+              SymbolDebugInfo{"function parameter"},
+              &function_declaration.parameters[i],
+              0,
+              SymbolKind::Parameter});
     }
 
     for (size_t i = 0; i < function_declaration.body->statements.size(); ++i) {
@@ -357,6 +375,7 @@ class SymbolTableBuilder {
   }
 
   SymbolTable symbol_table_;
+  DebugCtx& debug_ctx_;
   std::vector<LocalSymbolTable*> scope_stack_;
   std::vector<size_t> next_statement_id_stack_;
   size_t current_statement_id_ = 0;
@@ -364,9 +383,19 @@ class SymbolTableBuilder {
 
 }  // namespace
 
-SymbolTable BuildSymbolTable(const Program& program) {
-  SymbolTableBuilder builder;
+SymbolTable BuildSymbolTable(const Program& program, DebugCtx& debug_ctx) {
+  SymbolTableBuilder builder(debug_ctx);
   return builder.Build(program);
+}
+
+SymbolTable BuildSymbolTable(const Program& program) {
+  DebugCtx debug_ctx;
+  SymbolTable symbol_table = BuildSymbolTable(program, debug_ctx);
+  if (debug_ctx.GetErrors().HasErrors()) {
+    debug_ctx.GetErrors().ThrowErrors();
+  }
+
+  return symbol_table;
 }
 
 }  // namespace Parsing

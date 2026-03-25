@@ -3,7 +3,7 @@
 #include <gtest/gtest.h>
 
 #include "Parsing/Ast.hpp"
-#include "Parsing/Parser.hpp"
+#include "TestParseUtils.hpp"
 #include "Visitors/Printer.hpp"
 #include "Visitors/PrinterAST.hpp"
 

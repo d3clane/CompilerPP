@@ -27,6 +27,7 @@ FLEX_TARGET(
 
 add_library(
   compiler_frontend
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Debug/DebugCtx.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Debug/Debug.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Debug/Errors.cpp"
   ${BISON_CompilerParser_OUTPUTS}

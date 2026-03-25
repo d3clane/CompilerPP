@@ -8,6 +8,8 @@
 
 namespace Parsing {
 
+class DebugCtx;
+
 template <typename... SupportedOperationTypes>
 struct SupportedExprOps {
 };
@@ -72,7 +74,12 @@ constexpr bool IsSupportedExprOp() {
 void CheckTypes(
     const Program& program,
     const UseResolver& use_resolver,
+    const SymbolTable& symbol_table,
+    DebugCtx& debug_ctx);
+
+void CheckTypes(
+    const Program& program,
+    const UseResolver& use_resolver,
     const SymbolTable& symbol_table);
 
 }  // namespace Parsing
-

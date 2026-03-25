@@ -5,6 +5,7 @@
 #include <string>
 #include <variant>
 
+#include "Debug/DebugCtx.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "Utils/Overload.hpp"
 
@@ -14,9 +15,13 @@ namespace {
 
 class UseResolverBuilder {
  public:
-  UseResolverBuilder(const Program& program, const SymbolTable& symbol_table)
+  UseResolverBuilder(
+      const Program& program,
+      const SymbolTable& symbol_table,
+      DebugCtx& debug_ctx)
       : program_(program),
-        symbol_table_(symbol_table) {}
+        symbol_table_(symbol_table),
+        debug_ctx_(debug_ctx) {}
 
   std::map<UseResolver::Use, const ASTNode*> Build() {
     VisitStatements(program_.top_statements);
@@ -43,12 +48,14 @@ class UseResolverBuilder {
 
       const LocalSymbolTable* parent_scope = scope->GetParent();
       if (parent_scope == nullptr) {
-        throw std::runtime_error("use before def");
+        debug_ctx_.GetErrors().AddError(use_node, "use before def: " + name);
+        return nullptr;
       }
 
       const SymbolData* parent_symbol = parent_scope->GetSymbolInfo(name);
       if (parent_symbol == nullptr) {
-        throw std::runtime_error("use before def");
+        debug_ctx_.GetErrors().AddError(use_node, "use before def: " + name);
+        return nullptr;
       }
 
       return parent_symbol->declaration_node;
@@ -56,7 +63,8 @@ class UseResolverBuilder {
 
     const SymbolData* visible_symbol = scope->GetSymbolInfo(name);
     if (visible_symbol == nullptr) {
-      throw std::runtime_error("use before def");
+      debug_ctx_.GetErrors().AddError(use_node, "use before def: " + name);
+      return nullptr;
     }
 
     return visible_symbol->declaration_node;
@@ -67,6 +75,10 @@ class UseResolverBuilder {
       const std::string& name,
       size_t in_scope_stmt_id) {
     const ASTNode* resolved_definition_node = ResolveUse(name, use_node, in_scope_stmt_id);
+    if (resolved_definition_node == nullptr) {
+      return;
+    }
+
     use_to_definition_.emplace(
         UseResolver::Use{use_node, name},
         resolved_definition_node);
@@ -192,9 +204,10 @@ class UseResolverBuilder {
               RegisterUse(&function_call, function_call.function_name, in_scope_stmt_id);
               
               const SymbolData* data = symbol_table_.GetSymbolInfo(function_call.function_name, &function_call);
-              assert(data != nullptr);
-              if (data->kind != SymbolKind::Function) {
-                throw std::runtime_error("called object is not a function: " + function_call.function_name);
+              if (data != nullptr && data->kind != SymbolKind::Function) {
+                debug_ctx_.GetErrors().AddError(
+                    &function_call,
+                    "called object is not a function: " + function_call.function_name);
               }
 
               for (size_t i = 0; i < function_call.arguments.size(); ++i) {
@@ -217,6 +230,7 @@ class UseResolverBuilder {
 
   const Program& program_;
   const SymbolTable& symbol_table_;
+  DebugCtx& debug_ctx_;
   std::map<UseResolver::Use, const ASTNode*> use_to_definition_;
 };
 
@@ -238,15 +252,28 @@ const ASTNode* UseResolver::GetUsedVarDef(
   return definition_it->second;
 }
 
-UseResolver BuildUseResolver(const Program& program, SymbolTable& symbol_table) {
+UseResolver BuildUseResolver(
+    const Program& program,
+    SymbolTable& symbol_table,
+    DebugCtx& debug_ctx) {
   if (symbol_table.GetTable(&program) == nullptr) {
     throw std::runtime_error(
         "BuildUseResolver requires a symbol table built for the same program");
   }
 
   UseResolver resolver;
-  UseResolverBuilder builder(program, symbol_table);
+  UseResolverBuilder builder(program, symbol_table, debug_ctx);
   resolver.use_to_definition_ = builder.Build();
+
+  return resolver;
+}
+
+UseResolver BuildUseResolver(const Program& program, SymbolTable& symbol_table) {
+  DebugCtx debug_ctx;
+  UseResolver resolver = BuildUseResolver(program, symbol_table, debug_ctx);
+  if (debug_ctx.GetErrors().HasErrors()) {
+    debug_ctx.GetErrors().ThrowErrors();
+  }
 
   return resolver;
 }

@@ -9,6 +9,8 @@
 
 namespace Parsing {
 
+class DebugCtx;
+
 class UseResolver {
  public:
   struct Use {
@@ -33,9 +35,14 @@ class UseResolver {
 
   friend UseResolver BuildUseResolver(
       const Program& program,
-      SymbolTable& symbol_table);
+      SymbolTable& symbol_table,
+      DebugCtx& debug_ctx);
 };
 
+UseResolver BuildUseResolver(
+    const Program& program,
+    SymbolTable& symbol_table,
+    DebugCtx& debug_ctx);
 UseResolver BuildUseResolver(const Program& program, SymbolTable& symbol_table);
 
 }  // namespace Parsing

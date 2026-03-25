@@ -9,6 +9,7 @@
 #include <variant>
 #include <vector>
 
+#include "Debug/DebugCtx.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -99,10 +100,12 @@ class TypeCheckerVisitor {
   TypeCheckerVisitor(
       const Program& program,
       const UseResolver& use_resolver,
-      const SymbolTable& symbol_table)
+      const SymbolTable& symbol_table,
+      DebugCtx& debug_ctx)
       : program_(program),
         use_resolver_(use_resolver),
-        symbol_table_(symbol_table) {}
+        symbol_table_(symbol_table),
+        debug_ctx_(debug_ctx) {}
 
   void Check() {
     if (symbol_table_.GetTable(&program_) == nullptr) {
@@ -120,13 +123,21 @@ class TypeCheckerVisitor {
     const SymbolData* symbol_data;
   };
 
-  ResolvedSymbol ResolveUsedSymbol(
+  void ReportCodeError(
+      const ASTNode* node,
+      const std::string& message) {
+    debug_ctx_.GetErrors().AddError(node, message);
+    recovering_from_error_ = true;
+  }
+
+  std::optional<ResolvedSymbol> ResolveUsedSymbol(
       const std::string& name,
       const ASTNode* use_node,
-      const std::string& error_context) const {
+      const std::string& error_context) {
     const ASTNode* definition_node = use_resolver_.GetUsedVarDef(name, use_node);
     if (definition_node == nullptr) {
-      throw std::runtime_error(error_context + ": unknown symbol " + name);
+      ReportCodeError(use_node, error_context + ": unknown symbol " + name);
+      return std::nullopt;
     }
 
     const SymbolData* symbol_data = symbol_table_.GetSymbolInfo(name, definition_node);
@@ -156,15 +167,18 @@ class TypeCheckerVisitor {
         type.type);
   }
 
-  Type RequireValueType(
+  std::optional<Type> RequireValueType(
       const Expression& expression,
       const std::string& error_context) {
     const std::optional<Type> evaluated_type = EvaluateExpressionType(expression);
     if (!evaluated_type.has_value()) {
-      throw std::runtime_error(error_context + ": expression has no value");
+      if (!recovering_from_error_) {
+        ReportCodeError(&expression, error_context + ": expression has no value");
+      }
+      return std::nullopt;
     }
 
-    return *evaluated_type;
+    return evaluated_type;
   }
 
   void CollectFunctionDeclarations(const List<Statement>& statements) {
@@ -213,6 +227,7 @@ class TypeCheckerVisitor {
   void VisitStatements(const List<Statement>& statements) {
     for (size_t i = 0; i < statements.size(); ++i) {
       assert(statements[i] != nullptr);
+      recovering_from_error_ = false;
       VisitStatement(*statements[i]);
     }
   }
@@ -252,13 +267,18 @@ class TypeCheckerVisitor {
       return;
     }
 
-    const Type initializer_type =
+    const std::optional<Type> initializer_type =
         RequireValueType(*declaration.initializer, "Declaration initializer");
-    if (!AreTypesEqual(initializer_type, declaration.type)) {
-      throw std::runtime_error(
+    if (recovering_from_error_ || !initializer_type.has_value()) {
+      return;
+    }
+
+    if (!AreTypesEqual(*initializer_type, declaration.type)) {
+      ReportCodeError(
+          &declaration,
           "Type mismatch in declaration of " + declaration.variable_name +
           ": expected " + TypeToString(declaration.type) +
-          ", got " + TypeToString(initializer_type));
+          ", got " + TypeToString(*initializer_type));
     }
   }
 
@@ -273,16 +293,26 @@ class TypeCheckerVisitor {
   void VisitAssignmentStatement(const AssignmentStatement& assignment) {
     assert(assignment.expr != nullptr);
 
-    const ResolvedSymbol resolved_symbol = ResolveUsedSymbol(
+    const std::optional<ResolvedSymbol> resolved_symbol = ResolveUsedSymbol(
         assignment.variable_name,
         &assignment,
         "Assignment");
-    const Type value_type = RequireValueType(*assignment.expr, "Assignment");
-    if (!AreTypesEqual(value_type, resolved_symbol.symbol_data->type)) {
-      throw std::runtime_error(
+    if (recovering_from_error_ || !resolved_symbol.has_value()) {
+      return;
+    }
+
+    const std::optional<Type> value_type =
+        RequireValueType(*assignment.expr, "Assignment");
+    if (recovering_from_error_ || !value_type.has_value()) {
+      return;
+    }
+
+    if (!AreTypesEqual(*value_type, resolved_symbol->symbol_data->type)) {
+      ReportCodeError(
+          &assignment,
           "Type mismatch in assignment to " + assignment.variable_name +
-          ": expected " + TypeToString(resolved_symbol.symbol_data->type) +
-          ", got " + TypeToString(value_type));
+          ": expected " + TypeToString(resolved_symbol->symbol_data->type) +
+          ", got " + TypeToString(*value_type));
     }
   }
 
@@ -296,13 +326,24 @@ class TypeCheckerVisitor {
     assert(if_statement.true_block != nullptr);
     assert(if_statement.else_tail != nullptr);
 
-    const Type condition_type = RequireValueType(*if_statement.condition, "If condition");
-    if (!std::holds_alternative<BoolType>(condition_type.type)) {
-      throw std::runtime_error(
-          "If condition must be bool, got " + TypeToString(condition_type));
+    const std::optional<Type> condition_type =
+        RequireValueType(*if_statement.condition, "If condition");
+    if (recovering_from_error_ || !condition_type.has_value()) {
+      return;
+    }
+
+    if (!std::holds_alternative<BoolType>(condition_type->type)) {
+      ReportCodeError(
+          &if_statement,
+          "If condition must be bool, got " + TypeToString(*condition_type));
+      return;
     }
 
     VisitBlock(*if_statement.true_block);
+    if (recovering_from_error_) {
+      return;
+    }
+
     VisitElseTail(*if_statement.else_tail);
   }
 
@@ -318,28 +359,37 @@ class TypeCheckerVisitor {
 
   void VisitReturnStatement(const ReturnStatement& return_statement) {
     if (function_return_type_stack_.empty()) {
-      throw std::runtime_error("Return statement is outside of function");
+      ReportCodeError(&return_statement, "Return statement is outside of function");
+      return;
     }
 
     const std::optional<Type>& expected_type = function_return_type_stack_.back();
     if (!expected_type.has_value()) {
       if (return_statement.expr != nullptr) {
-        throw std::runtime_error("Function without return type cannot return a value");
+        ReportCodeError(
+            &return_statement,
+            "Function without return type cannot return a value");
       }
 
       return;
     }
 
     if (return_statement.expr == nullptr) {
-      throw std::runtime_error("Return expression is required");
+      ReportCodeError(&return_statement, "Return expression is required");
+      return;
     }
 
-    const Type actual_type =
+    const std::optional<Type> actual_type =
         RequireValueType(*return_statement.expr, "Return statement");
-    if (!AreTypesEqual(actual_type, *expected_type)) {
-      throw std::runtime_error(
+    if (recovering_from_error_ || !actual_type.has_value()) {
+      return;
+    }
+
+    if (!AreTypesEqual(*actual_type, *expected_type)) {
+      ReportCodeError(
+          &return_statement,
           "Return type mismatch: expected " + TypeToString(*expected_type) +
-          ", got " + TypeToString(actual_type));
+          ", got " + TypeToString(*actual_type));
     }
   }
 
@@ -352,15 +402,23 @@ class TypeCheckerVisitor {
   }
 
   std::optional<Type> EvaluateExpressionType(const Expression& expression) {
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
+
     return std::visit(
         Utils::Overload{
             [this](const IdentifierExpression& identifier_expression)
                 -> std::optional<Type> {
-              const ResolvedSymbol resolved_symbol = ResolveUsedSymbol(
+              const std::optional<ResolvedSymbol> resolved_symbol = ResolveUsedSymbol(
                   identifier_expression.name,
                   &identifier_expression,
                   "Identifier");
-              return resolved_symbol.symbol_data->type;
+              if (!resolved_symbol.has_value()) {
+                return std::nullopt;
+              }
+
+              return resolved_symbol->symbol_data->type;
             },
             [](const LiteralExpression& literal_expression) -> std::optional<Type> {
               return std::visit(
@@ -390,11 +448,17 @@ class TypeCheckerVisitor {
   template <UnaryExpressionNode Node>
   std::optional<Type> EvaluateUnaryExpressionType(const Node& unary_expression) {
     assert(unary_expression.operand != nullptr);
-    const Type operand_type =
+    const std::optional<Type> operand_type =
         RequireValueType(*unary_expression.operand, "Unary expression");
-    if (!IsSupportedExprOp<Node>(operand_type)) {
-      throw std::runtime_error(
-          "Unary operation is not supported for type " + TypeToString(operand_type));
+    if (recovering_from_error_ || !operand_type.has_value()) {
+      return std::nullopt;
+    }
+
+    if (!IsSupportedExprOp<Node>(*operand_type)) {
+      ReportCodeError(
+          &unary_expression,
+          "Unary operation is not supported for type " + TypeToString(*operand_type));
+      return std::nullopt;
     }
 
     return operand_type;
@@ -404,19 +468,31 @@ class TypeCheckerVisitor {
   std::optional<Type> EvaluateBinaryExpressionType(const Node& binary_expression) {
     assert(binary_expression.left != nullptr);
     assert(binary_expression.right != nullptr);
-    const Type left_type =
+    const std::optional<Type> left_type =
         RequireValueType(*binary_expression.left, "Binary expression left operand");
-    const Type right_type =
-        RequireValueType(*binary_expression.right, "Binary expression right operand");
-    if (!AreTypesEqual(left_type, right_type)) {
-      throw std::runtime_error(
-          "Binary expression type mismatch: left is " + TypeToString(left_type) +
-          ", right is " + TypeToString(right_type));
+    if (recovering_from_error_ || !left_type.has_value()) {
+      return std::nullopt;
     }
 
-    if (!IsSupportedExprOp<Node>(left_type)) {
-      throw std::runtime_error(
-          "Binary operation is not supported for type " + TypeToString(left_type));
+    const std::optional<Type> right_type =
+        RequireValueType(*binary_expression.right, "Binary expression right operand");
+    if (recovering_from_error_ || !right_type.has_value()) {
+      return std::nullopt;
+    }
+
+    if (!AreTypesEqual(*left_type, *right_type)) {
+      ReportCodeError(
+          &binary_expression,
+          "Binary expression type mismatch: left is " + TypeToString(*left_type) +
+          ", right is " + TypeToString(*right_type));
+      return std::nullopt;
+    }
+
+    if (!IsSupportedExprOp<Node>(*left_type)) {
+      ReportCodeError(
+          &binary_expression,
+          "Binary operation is not supported for type " + TypeToString(*left_type));
+      return std::nullopt;
     }
 
     // Comparison always return bool
@@ -451,9 +527,11 @@ class TypeCheckerVisitor {
       CallArgumentsCheckState& state) {
     state.has_named_arguments = true;
     if (state.has_positional_arguments) {
-      throw std::runtime_error(
+      ReportCodeError(
+          &function_call,
           "Function call " + function_call.function_name +
           " mixes named and positional arguments");
+      return;
     }
 
     // TODO: move to the function of finding argument index by name
@@ -467,27 +545,36 @@ class TypeCheckerVisitor {
 
     // TODO: also move it to this function.
     if (parameter_index == function_type.parameter_types.size()) {
-      throw std::runtime_error(
+      ReportCodeError(
+          &named_argument,
           "Unknown named argument " + named_argument.name +
           " for function " + function_call.function_name);
+      return;
     }
 
     if (!state.used_parameter_indices.insert(parameter_index).second) {
-      throw std::runtime_error(
+      ReportCodeError(
+          &named_argument,
           "Duplicate named argument " + named_argument.name +
           " for function " + function_call.function_name);
+      return;
     }
 
     assert(named_argument.value != nullptr);
-    const Type argument_type = RequireValueType(
+    const std::optional<Type> argument_type = RequireValueType(
         *named_argument.value,
         "Function named argument");
+    if (recovering_from_error_ || !argument_type.has_value()) {
+      return;
+    }
+
     const Type& expected_type = function_type.parameter_types[parameter_index];
-    if (!AreTypesEqual(argument_type, expected_type)) {
-      throw std::runtime_error(
+    if (!AreTypesEqual(*argument_type, expected_type)) {
+      ReportCodeError(
+          &named_argument,
           "Type mismatch in named argument " + named_argument.name +
           ": expected " + TypeToString(expected_type) +
-          ", got " + TypeToString(argument_type));
+          ", got " + TypeToString(*argument_type));
     }
   }
 
@@ -498,28 +585,38 @@ class TypeCheckerVisitor {
       CallArgumentsCheckState& state) {
     state.has_positional_arguments = true;
     if (state.has_named_arguments) {
-      throw std::runtime_error(
+      ReportCodeError(
+          &function_call,
           "Function call " + function_call.function_name +
           " mixes named and positional arguments");
+      return;
     }
 
     if (state.positional_index >= function_type.parameter_types.size()) {
-      throw std::runtime_error(
+      ReportCodeError(
+          &function_call,
           "Function " + function_call.function_name +
           " argument count mismatch");
+      return;
     }
 
     assert(positional_argument.value != nullptr);
-    const Type argument_type = RequireValueType(
+    const std::optional<Type> argument_type = RequireValueType(
         *positional_argument.value,
         "Function positional argument");
+    if (recovering_from_error_ || !argument_type.has_value()) {
+      return;
+    }
+
     const Type& expected_type = function_type.parameter_types[state.positional_index];
-    if (!AreTypesEqual(argument_type, expected_type)) {
-      throw std::runtime_error(
+    if (!AreTypesEqual(*argument_type, expected_type)) {
+      ReportCodeError(
+          &positional_argument,
           "Type mismatch in positional argument " +
           std::to_string(state.positional_index) +
           ": expected " + TypeToString(expected_type) +
-          ", got " + TypeToString(argument_type));
+          ", got " + TypeToString(*argument_type));
+      return;
     }
 
     ++state.positional_index;
@@ -530,13 +627,19 @@ class TypeCheckerVisitor {
       const FuncType& function_type,
       const FunctionDeclarationStatement& function_declaration) {
     if (function_call.arguments.size() != function_type.parameter_types.size()) {
-      throw std::runtime_error(
+      ReportCodeError(
+          &function_call,
           "Function " + function_call.function_name +
           " argument count mismatch");
+      return;
     }
 
     CallArgumentsCheckState state;
     for (size_t i = 0; i < function_call.arguments.size(); ++i) {
+      if (recovering_from_error_) {
+        return;
+      }
+
       assert(function_call.arguments[i] != nullptr);
       std::visit(
           Utils::Overload{
@@ -567,16 +670,23 @@ class TypeCheckerVisitor {
   }
 
   std::optional<Type> EvaluateFunctionCallType(const FunctionCall& function_call) {
-    const ResolvedSymbol resolved_symbol = ResolveUsedSymbol(
+    const std::optional<ResolvedSymbol> resolved_symbol = ResolveUsedSymbol(
         function_call.function_name,
         &function_call,
         "Function call");
-    if (resolved_symbol.symbol_data->kind != SymbolKind::Function) {
-      throw std::runtime_error(function_call.function_name + " is not a function");
+    if (recovering_from_error_ || !resolved_symbol.has_value()) {
+      return std::nullopt;
+    }
+
+    if (resolved_symbol->symbol_data->kind != SymbolKind::Function) {
+      ReportCodeError(
+          &function_call,
+          function_call.function_name + " is not a function");
+      return std::nullopt;
     }
 
     const auto* function_type_ptr =
-        std::get_if<FuncType>(&resolved_symbol.symbol_data->type.type);
+        std::get_if<FuncType>(&resolved_symbol->symbol_data->type.type);
     if (function_type_ptr == nullptr) {
       throw std::runtime_error(
           "symbol table is incorrect for this program");
@@ -584,11 +694,14 @@ class TypeCheckerVisitor {
 
     const FuncType& function_type = *function_type_ptr;
     const FunctionDeclarationStatement* function_declaration =
-        GetFunctionDeclaration(resolved_symbol.definition_node);
+        GetFunctionDeclaration(resolved_symbol->definition_node);
     TypeCheckCallArguments(
         function_call,
         function_type,
         *function_declaration);
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
 
     if (function_type.return_type == nullptr) {
       return std::nullopt;
@@ -600,6 +713,8 @@ class TypeCheckerVisitor {
   const Program& program_;
   const UseResolver& use_resolver_;
   const SymbolTable& symbol_table_;
+  DebugCtx& debug_ctx_;
+  bool recovering_from_error_ = false;
   std::map<const ASTNode*, const FunctionDeclarationStatement*> function_declarations_;
   std::vector<std::optional<Type>> function_return_type_stack_;
 };
@@ -609,9 +724,21 @@ class TypeCheckerVisitor {
 void CheckTypes(
     const Program& program,
     const UseResolver& use_resolver,
-    const SymbolTable& symbol_table) {
-  TypeCheckerVisitor visitor(program, use_resolver, symbol_table);
+    const SymbolTable& symbol_table,
+    DebugCtx& debug_ctx) {
+  TypeCheckerVisitor visitor(program, use_resolver, symbol_table, debug_ctx);
   visitor.Check();
+}
+
+void CheckTypes(
+    const Program& program,
+    const UseResolver& use_resolver,
+    const SymbolTable& symbol_table) {
+  DebugCtx debug_ctx;
+  CheckTypes(program, use_resolver, symbol_table, debug_ctx);
+  if (debug_ctx.GetErrors().HasErrors()) {
+    debug_ctx.GetErrors().ThrowErrors();
+  }
 }
 
 }  // namespace Parsing

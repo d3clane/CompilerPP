@@ -10,6 +10,8 @@
 
 namespace Parsing {
 
+class DebugCtx;
+
 struct SymbolDebugInfo {
   std::string context;
 
@@ -40,11 +42,13 @@ struct SymbolData {
 
 class LocalSymbolTable {
  public:
+  using ErrorMsg = std::string;
+
   explicit LocalSymbolTable(LocalSymbolTable* parent);
 
   const SymbolData* GetSymbolInfo(const std::string& name) const;
   const SymbolData* GetSymbolInfoInLocalScope(const std::string& name) const;
-  void AddSymbolInfo(SymbolData symbol_data);
+  ErrorMsg AddSymbolInfo(SymbolData symbol_data);
   LocalSymbolTable* GetParent() const;
 
  private:
@@ -73,6 +77,7 @@ class SymbolTable {
   std::vector<std::unique_ptr<LocalSymbolTable>> owned_tables_;
 };
 
+SymbolTable BuildSymbolTable(const Program& program, DebugCtx& debug_ctx);
 SymbolTable BuildSymbolTable(const Program& program);
 
 }  // namespace Parsing

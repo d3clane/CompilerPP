@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "Visitors/Interpreter.hpp"
-#include "Parsing/Parser.hpp"
+#include "TestParseUtils.hpp"
 
 namespace {
 
