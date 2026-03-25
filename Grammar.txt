@@ -70,9 +70,3 @@ final_expr = ident | num | "true" | "false" | func_call | "(" expr ")" ;
 
 # num and ident are tokens got from lexer. I.e. ident is variable, num is number.
 # Therefore won't define it here
-
-# Error recovery notes (implementation-level):
-# - lexer: when unknown/invalid token is met, an error is stored and lexing skips
-#   until one of statement boundaries: ';', '{', '}'.
-# - parser: error productions recover inside stmt/decl lists by synchronizing on ';'
-#   and inside blocks by synchronizing on '}'.
