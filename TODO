@@ -1,3 +1,5 @@
 1. Support function type of variable in grammar 
 2. Collect all errors during one stage (lexer or parser or semantic analyses) to print them at once.
 3. const-correctness checking visitor (I have mutable keyword)
+4. support classes (all methods are public, all variables are private)
+5. support one-dimension array (only one-dim, because higher dim can be represented via class + one-dim)

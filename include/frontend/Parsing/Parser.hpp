@@ -9,6 +9,6 @@
 namespace Parsing {
 
 Program ParseTokens(const std::vector<Tokenizing::TokenVariant>& tokens);
-Program ParseSource(const std::string& source);
+Program ParseSource(const std::string& source, const std::string& filename = "<input>");
 
 }  // namespace Parsing

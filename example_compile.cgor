@@ -1,0 +1,31 @@
+func factorial(n int) int {
+    if n <= 0 {
+        return 1;
+    }
+
+    return factorial(n - 1) * n;
+}
+
+func fib(n int) int {
+    if n == 0 {
+        return 0;
+    } else if n == 1 {
+        return 1;
+    }
+
+
+    return fib(n - 1) + fib(n - 2);
+}
+
+var GlobalN int = 10;
+
+func main() {
+    if GlobalN % 3 == 1 {
+        print(GlobalN - 2);
+        var GlobalN int = 17;
+        print(GlobalN);
+    }
+    print(GlobalN);
+    GlobalN = GlobalN + 10;
+    print(GlobalN);
+}

@@ -442,4 +442,22 @@ TEST(ParserTreeTests, PrintsProgramAsAstTree) {
   EXPECT_NE(tree.find("NamedArgument: a"), std::string::npos);
 }
 
+TEST(ParserTreeTests, ReportsMultipleLexerAndParserErrorsTogether) {
+  const std::string source =
+      "var x int = ;\n"
+      "func main( int ) {\n"
+      "  @@@\n"
+      "}\n";
+
+  try {
+    static_cast<void>(Parsing::ParseSource(source, "broken.cgor"));
+    FAIL() << "Expected ParseSource to throw aggregated frontend errors";
+  } catch (const std::runtime_error& error) {
+    const std::string message = error.what();
+    EXPECT_NE(message.find("Tokenizing error"), std::string::npos);
+    EXPECT_NE(message.find("Parse error"), std::string::npos);
+    EXPECT_NE(message.find("broken.cgor"), std::string::npos);
+  }
+}
+
 }  // namespace

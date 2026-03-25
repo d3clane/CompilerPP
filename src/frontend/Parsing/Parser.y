@@ -6,28 +6,44 @@
 %define api.parser.class {BisonParser}
 %define api.value.type variant
 %define api.token.constructor
-%define parse.error verbose
+%define parse.error detailed
 
 %code requires {
+#include <cstddef>
+#include <cassert>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include "Debug/Debug.hpp"
+#include "Debug/Errors.hpp"
 #include "Parsing/Ast.hpp"
 #include "Tokenizing/Tokens.hpp"
 
 namespace Parsing {
 
+struct PendingErrorState {
+  std::string error_msg;
+  size_t invalid_token_idx;
+};
+
 struct ParserState {
   const std::vector<Tokenizing::TokenVariant>& tokens;
   size_t current_index;
+  const std::vector<DebugInfo>* token_debug_infos;
+  FrontendErrors* errors;
+  std::string filename;
+  size_t input_size;
+
+  std::vector<PendingErrorState> pending_errors;
 };
 
 }  // namespace Parsing
 }
 
 %code {
+#include <algorithm>
 #include <stdexcept>
 #include <utility>
 #include <variant>
@@ -61,6 +77,146 @@ std::unique_ptr<CallArgument> MakeNamedArgument(
     Expression value) {
   return std::make_unique<CallArgument>(
       NamedCallArgument{std::move(name), std::make_unique<Expression>(std::move(value))});
+}
+
+bool IsSemicolonToken(const Tokenizing::TokenVariant& token) {
+  return std::holds_alternative<Tokenizing::Semicolon>(token);
+}
+
+bool IsLeftBraceToken(const Tokenizing::TokenVariant& token) {
+  return std::holds_alternative<Tokenizing::LeftBrace>(token);
+}
+
+bool IsRightBraceToken(const Tokenizing::TokenVariant& token) {
+  return std::holds_alternative<Tokenizing::RightBrace>(token);
+}
+
+size_t GetTokenRangeStart(const ParserState& state, size_t token_index) {
+  if (state.token_debug_infos == nullptr || token_index >= state.token_debug_infos->size()) {
+    return 0;
+  }
+
+  return (*state.token_debug_infos)[token_index].code_range.first;
+}
+
+size_t GetTokenRangeEnd(const ParserState& state, size_t token_index) {
+  if (state.token_debug_infos == nullptr || token_index >= state.token_debug_infos->size()) {
+    return 0;
+  }
+
+  return (*state.token_debug_infos)[token_index].code_range.second;
+}
+
+size_t FindPreviousBoundaryEnd(const ParserState& state, size_t from_index) {
+  size_t index = std::min(from_index, state.tokens.size());
+  while (index > 0) {
+    --index;
+    if (IsSemicolonToken(state.tokens[index]) || IsRightBraceToken(state.tokens[index])) {
+      return GetTokenRangeEnd(state, index);
+    }
+  }
+
+  return 0;
+}
+
+size_t FindNextTokenIndex(
+    const ParserState& state,
+    size_t from_index,
+    bool (*predicate)(const Tokenizing::TokenVariant&)) {
+  for (size_t index = from_index; index < state.tokens.size(); ++index) {
+    if (predicate(state.tokens[index])) {
+      return index;
+    }
+  }
+
+  return state.tokens.size();
+}
+
+PendingErrorState GetPendingError(ParserState& state) {
+  assert(!state.pending_errors.empty());
+
+  const PendingErrorState pending_err = state.pending_errors.back();
+  state.pending_errors.pop_back();
+
+  return pending_err;
+}
+
+void AddPendingParseErrorWithContext(
+    ParserState& state,
+    const size_t error_token_index,
+    const std::string& errors_message,
+    size_t context_begin,
+    size_t context_end) {
+  if (state.errors == nullptr) {
+    return;
+  }
+
+  size_t highlight_begin = GetTokenRangeStart(state, error_token_index);
+  size_t highlight_end = GetTokenRangeEnd(state, error_token_index);
+
+  context_begin = std::min(context_begin, state.input_size);
+  context_end = std::min(context_end, state.input_size);
+  if (context_end < context_begin) {
+    context_end = context_begin;
+  }
+
+  highlight_begin = std::min(highlight_begin, state.input_size);
+  highlight_end = std::min(highlight_end, state.input_size);
+  if (highlight_end < highlight_begin) {
+    highlight_end = highlight_begin;
+  }
+
+  DebugInfo debug_info = CreateDebugInfo(
+      state.filename,
+      {0, 0},
+      {0, 0},
+      {context_begin, context_end});
+
+  if (state.token_debug_infos != nullptr &&
+      error_token_index < state.token_debug_infos->size()) {
+    debug_info.line_range = (*state.token_debug_infos)[error_token_index].line_range;
+    debug_info.column_range = (*state.token_debug_infos)[error_token_index].column_range;
+  }
+
+  if (context_end > context_begin && highlight_end > highlight_begin) {
+    const size_t stress_begin = highlight_begin > context_begin
+                                    ? highlight_begin - context_begin
+                                    : 0;
+    const size_t stress_end = std::min(highlight_end, context_end) - context_begin;
+    if (stress_end > stress_begin) {
+      debug_info.stressed_chars.push_back({stress_begin, stress_end});
+    }
+  }
+
+  state.errors->AddError(debug_info, errors_message);
+}
+
+void AddPendingParseErrorUntilSemicolon(ParserState& state) {
+  const auto [message, error_token_index] = GetPendingError(state);
+  const size_t context_begin = FindPreviousBoundaryEnd(state, error_token_index);
+  const size_t semicolon_index = FindNextTokenIndex(
+      state,
+      error_token_index,
+      IsSemicolonToken);
+  const size_t context_end = semicolon_index < state.tokens.size()
+                                 ? GetTokenRangeEnd(state, semicolon_index)
+                                 : state.input_size;
+  AddPendingParseErrorWithContext(state, error_token_index, message, 
+                                  context_begin, context_end);
+}
+
+void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
+  const auto [message, error_token_index] = GetPendingError(state);
+  const size_t context_begin = FindPreviousBoundaryEnd(state, error_token_index);
+  const size_t block_begin_index = FindNextTokenIndex(
+      state,
+      error_token_index,
+      IsLeftBraceToken);
+  const size_t context_end = block_begin_index < state.tokens.size()
+                                 ? GetTokenRangeStart(state, block_begin_index)
+                                 : state.input_size;
+  AddPendingParseErrorWithContext(state, error_token_index, message, 
+                                  context_begin, context_end);
 }
 
 }  // namespace Parsing
@@ -171,6 +327,11 @@ decl_stmt_list:
       $1.push_back(std::make_unique<Statement>(std::move($2)));
       $$ = std::move($1);
     }
+  | decl_stmt_list error SEMICOLON {
+      AddPendingParseErrorUntilSemicolon(state);
+      $$ = std::move($1);
+      yyerrok;
+    }
 ;
 
 stmt_list:
@@ -180,6 +341,11 @@ stmt_list:
   | stmt_list stmt {
       $1.push_back(std::make_unique<Statement>(std::move($2)));
       $$ = std::move($1);
+    }
+  | stmt_list error SEMICOLON {
+      AddPendingParseErrorUntilSemicolon(state);
+      $$ = std::move($1);
+      yyerrok;
     }
 ;
 
@@ -233,6 +399,11 @@ func_decl:
           std::move($4),
           std::move($6),
           std::make_unique<Block>(std::move($7))};
+    }
+  | FUNC_KW error block {
+      AddPendingParseErrorUntilBlockBegin(state);
+      $$ = FunctionDeclarationStatement{};
+      yyerrok;
     }
 ;
 
@@ -666,7 +837,14 @@ BisonParser::symbol_type yylex(ParserState& state) {
 }
 
 void BisonParser::error(const std::string& message) {
-  throw std::runtime_error("Parse error: " + message);
+  if (state.errors == nullptr) {
+    throw std::runtime_error("Parse error: " + message);
+  }
+
+  state.pending_errors.push_back(PendingErrorState{
+    "Parse error: " + message,
+    state.current_index == 0 ? 0 : state.current_index - 1
+  });
 }
 
 }  // namespace Parsing

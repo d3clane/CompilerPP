@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
       std::istreambuf_iterator<char>()};
 
   try {
-    const Parsing::Program program = Parsing::ParseSource(source);
+    const Parsing::Program program = Parsing::ParseSource(source, input_path);
     Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
     const Parsing::UseResolver use_resolver =
         Parsing::BuildUseResolver(program, symbol_table);
