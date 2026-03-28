@@ -231,6 +231,7 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %token BOOL_KW "bool"
 %token MUTABLE_KW "mutable"
 %token FUNC_KW "func"
+%token CLASS_KW "class"
 %token RETURN_KW "return"
 %token TRUE_KW "true"
 %token FALSE_KW "false"
@@ -250,10 +251,13 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %token SEMICOLON ";"
 %token COMMA ","
 %token COLON ":"
+%token DOT "."
 %token LEFT_PAREN "("
 %token RIGHT_PAREN ")"
 %token LEFT_BRACE "{"
 %token RIGHT_BRACE "}"
+%token LEFT_BRACKET "["
+%token RIGHT_BRACKET "]"
 
 %token EQUAL_EQUAL "=="
 %token NOT_EQUAL "!="
@@ -272,6 +276,7 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %type <Statement> decl_stmt
 %type <DeclarationStatement> var_decl
 %type <FunctionDeclarationStatement> func_decl
+%type <ClassDeclarationStatement> class_decl
 %type <AssignmentStatement> assign_stmt
 %type <PrintStatement> print_stmt
 %type <IfStatement> if_stmt
@@ -284,12 +289,18 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 
 %type <bool> mutable_opt
 %type <Type> type
+%type <Type> base_type
 %type <std::optional<Type>> return_type_opt
+%type <std::optional<std::string>> inheritance_opt
 %type <std::vector<FunctionParameter>> param_list_opt
 %type <std::vector<FunctionParameter>> param_list
 %type <FunctionParameter> param
+%type <std::vector<DeclarationStatement>> class_field_decl_list
+%type <std::vector<FunctionDeclarationStatement>> class_method_decl_list
 
 %type <FunctionCall> func_call
+%type <FieldAccess> field_access
+%type <MethodCall> method_call
 %type <List<CallArgument>> call_args_opt
 %type <List<CallArgument>> call_args
 %type <List<CallArgument>> named_arg_list
@@ -380,6 +391,9 @@ decl_stmt:
   | func_decl {
       $$ = Statement{StatementVariant{std::move($1)}};
     }
+  | class_decl {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
 ;
 
 var_decl:
@@ -404,6 +418,45 @@ func_decl:
       AddPendingParseErrorUntilBlockBegin(state);
       $$ = FunctionDeclarationStatement{};
       yyerrok;
+    }
+;
+
+class_decl:
+    CLASS_KW IDENT inheritance_opt LEFT_BRACE class_field_decl_list class_method_decl_list RIGHT_BRACE {
+      $$ = ClassDeclarationStatement{
+          std::move($2),
+          std::move($3),
+          std::move($5),
+          std::move($6)};
+    }
+;
+
+inheritance_opt:
+    %empty {
+      $$ = std::nullopt;
+    }
+  | COLON IDENT {
+      $$ = std::optional<std::string>{std::move($2)};
+    }
+;
+
+class_field_decl_list:
+    %empty {
+      $$ = std::vector<DeclarationStatement>();
+    }
+  | class_field_decl_list var_decl {
+      $1.push_back(std::move($2));
+      $$ = std::move($1);
+    }
+;
+
+class_method_decl_list:
+    %empty {
+      $$ = std::vector<FunctionDeclarationStatement>();
+    }
+  | class_method_decl_list func_decl {
+      $1.push_back(std::move($2));
+      $$ = std::move($1);
     }
 ;
 
@@ -452,11 +505,23 @@ param:
 ;
 
 type:
+    base_type {
+      $$ = std::move($1);
+    }
+  | base_type LEFT_BRACKET RIGHT_BRACKET {
+      $$ = Type{ArrayType{std::make_unique<Type>(std::move($1))}};
+    }
+;
+
+base_type:
     INT_KW {
       $$ = Type{IntType{}};
     }
   | BOOL_KW {
       $$ = Type{BoolType{}};
+    }
+  | IDENT {
+      $$ = Type{ClassType{std::move($1)}};
     }
 ;
 
@@ -548,6 +613,22 @@ block:
 func_call:
     IDENT LEFT_PAREN call_args_opt RIGHT_PAREN {
       $$ = FunctionCall{std::move($1), std::move($3)};
+    }
+;
+
+field_access:
+    IDENT DOT IDENT {
+      $$ = FieldAccess{
+          IdentifierExpression{std::move($1)},
+          IdentifierExpression{std::move($3)}};
+    }
+;
+
+method_call:
+    IDENT DOT func_call {
+      $$ = MethodCall{
+          IdentifierExpression{std::move($1)},
+          std::move($3)};
     }
 ;
 
@@ -709,6 +790,12 @@ final_expr:
   | func_call {
       $$ = Expression{ExpressionVariant{std::move($1)}};
     }
+  | field_access {
+      $$ = Expression{ExpressionVariant{std::move($1)}};
+    }
+  | method_call {
+      $$ = Expression{ExpressionVariant{std::move($1)}};
+    }
   | LEFT_PAREN expr RIGHT_PAREN {
       $$ = std::move($2);
     }
@@ -742,6 +829,9 @@ BisonParser::symbol_type yylex(ParserState& state) {
           },
           [](const Tokenizing::FuncKeyword&) -> BisonParser::symbol_type {
             return BisonParser::make_FUNC_KW();
+          },
+          [](const Tokenizing::ClassKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_CLASS_KW();
           },
           [](const Tokenizing::ReturnKeyword&) -> BisonParser::symbol_type {
             return BisonParser::make_RETURN_KW();
@@ -797,6 +887,9 @@ BisonParser::symbol_type yylex(ParserState& state) {
           [](const Tokenizing::Colon&) -> BisonParser::symbol_type {
             return BisonParser::make_COLON();
           },
+          [](const Tokenizing::Dot&) -> BisonParser::symbol_type {
+            return BisonParser::make_DOT();
+          },
           [](const Tokenizing::LeftParen&) -> BisonParser::symbol_type {
             return BisonParser::make_LEFT_PAREN();
           },
@@ -808,6 +901,12 @@ BisonParser::symbol_type yylex(ParserState& state) {
           },
           [](const Tokenizing::RightBrace&) -> BisonParser::symbol_type {
             return BisonParser::make_RIGHT_BRACE();
+          },
+          [](const Tokenizing::LeftBracket&) -> BisonParser::symbol_type {
+            return BisonParser::make_LEFT_BRACKET();
+          },
+          [](const Tokenizing::RightBracket&) -> BisonParser::symbol_type {
+            return BisonParser::make_RIGHT_BRACKET();
           },
           [](const Tokenizing::EqualEqual&) -> BisonParser::symbol_type {
             return BisonParser::make_EQUAL_EQUAL();

@@ -16,53 +16,7 @@ namespace Parsing {
 
 namespace {
 
-bool AreTypesEqual(const Type& left_type, const Type& right_type);
 std::string TypeToString(const Type& type);
-
-bool AreTypesEqual(const Type& left_type, const Type& right_type) {
-  return std::visit(
-      Utils::Overload{
-          [](const BoolType&, const BoolType&) {
-            return true;
-          },
-          [](const IntType&, const IntType&) {
-            return true;
-          },
-          [](const FuncType& left_function, const FuncType& right_function) {
-            if (left_function.parameter_types.size() !=
-                right_function.parameter_types.size()) {
-              return false;
-            }
-
-            if ((left_function.return_type == nullptr) !=
-                (right_function.return_type == nullptr)) {
-              return false;
-            }
-
-            if (left_function.return_type != nullptr &&
-                right_function.return_type != nullptr &&
-                !AreTypesEqual(
-                    *left_function.return_type,
-                    *right_function.return_type)) {
-              return false;
-            }
-
-            for (size_t i = 0; i < left_function.parameter_types.size(); ++i) {
-              if (!AreTypesEqual(
-                      left_function.parameter_types[i],
-                      right_function.parameter_types[i])) {
-                return false;
-              }
-            }
-
-            return true;
-          },
-          [](const auto&, const auto&) {
-            return false;
-          }},
-      left_type.type,
-      right_type.type);
-}
 
 std::string TypeToString(const Type& type) {
   return std::visit(
@@ -72,6 +26,16 @@ std::string TypeToString(const Type& type) {
           },
           [](const IntType&) -> std::string {
             return "int";
+          },
+          [](const ClassType& class_type) -> std::string {
+            return class_type.class_name;
+          },
+          [](const ArrayType& array_type) -> std::string {
+            if (array_type.element_type == nullptr) {
+              return "<invalid>[]";
+            }
+
+            return TypeToString(*array_type.element_type) + "[]";
           },
           [](const FuncType& function_type) -> std::string {
             std::string result = "func(";
@@ -100,29 +64,18 @@ class TypeCheckerVisitor {
   TypeCheckerVisitor(
       const Program& program,
       const UseResolver& use_resolver,
-      const SymbolTable& symbol_table,
+      const TypeDefiner& type_definer,
       DebugCtx& debug_ctx)
       : program_(program),
         use_resolver_(use_resolver),
-        symbol_table_(symbol_table),
+        type_definer_(type_definer),
         debug_ctx_(debug_ctx) {}
 
   void Check() {
-    if (symbol_table_.GetTable(&program_) == nullptr) {
-      throw std::runtime_error(
-          "Type checker requires a symbol table built for the same program");
-    }
-
-    CollectFunctionDeclarations(program_.top_statements);
     VisitStatements(program_.top_statements);
   }
 
  private:
-  struct ResolvedSymbol {
-    const ASTNode* definition_node;
-    const SymbolData* symbol_data;
-  };
-
   void ReportCodeError(
       const ASTNode* node,
       const std::string& message) {
@@ -130,32 +83,25 @@ class TypeCheckerVisitor {
     recovering_from_error_ = true;
   }
 
-  std::optional<ResolvedSymbol> ResolveUsedSymbol(
+  const UseResolver::ResolvedSymbol* ResolveUsedSymbol(
       const std::string& name,
       const ASTNode* use_node,
       const std::string& error_context) {
-    const ASTNode* definition_node = use_resolver_.GetUsedVarDef(name, use_node);
-    if (definition_node == nullptr) {
-      ReportCodeError(use_node, error_context + ": unknown symbol " + name);
-      return std::nullopt;
+    const UseResolver::ResolvedSymbol* resolved_symbol =
+        use_resolver_.GetResolvedSymbol(name, use_node);
+    if (resolved_symbol == nullptr) {
+      throw std::runtime_error(
+          "resolver is incorrect for this program: " +
+          error_context + ": unknown symbol " + name);
     }
 
-    const SymbolData* symbol_data = symbol_table_.GetSymbolInfo(name, definition_node);
-    if (symbol_data == nullptr) {
-      throw std::runtime_error("symbol table is incorrect for this program");
-    }
-
-    return ResolvedSymbol{definition_node, symbol_data};
+    return resolved_symbol;
   }
 
   const FunctionDeclarationStatement* GetFunctionDeclaration(
       const ASTNode* function_node) const {
-    const auto function_it = function_declarations_.find(function_node);
-    if (function_it == function_declarations_.end()) {
-      throw std::runtime_error("symbol table is incorrect for this program");
-    }
-
-    return function_it->second;
+    assert(function_node != nullptr);
+    return static_cast<const FunctionDeclarationStatement*>(function_node);
   }
 
   template <typename OpType>
@@ -165,6 +111,54 @@ class TypeCheckerVisitor {
           return Parsing::IsSupportedExprOp<OpType, ValueType>();
         },
         type.type);
+  }
+
+  bool IsDerivedClassOf(
+      const std::string& derived_class_name,
+      const std::string& base_class_name) const {
+    if (derived_class_name == base_class_name) {
+      return true;
+    }
+
+    const ClassDeclarationStatement* current_class =
+        type_definer_.GetClassDeclaration(derived_class_name);
+    std::set<std::string> visited_classes;
+    while (current_class != nullptr) {
+      if (!visited_classes.insert(current_class->class_name).second) {
+        return false;
+      }
+
+      if (!current_class->base_class_name.has_value()) {
+        return false;
+      }
+
+      if (*current_class->base_class_name == base_class_name) {
+        return true;
+      }
+
+      current_class =
+          type_definer_.GetClassDeclaration(*current_class->base_class_name);
+    }
+
+    return false;
+  }
+
+  bool IsTypeAssignable(
+      const Type& expected_type,
+      const Type& actual_type) const {
+    if (expected_type == actual_type) {
+      return true;
+    }
+
+    const auto* expected_class_type = std::get_if<ClassType>(&expected_type.type);
+    const auto* actual_class_type = std::get_if<ClassType>(&actual_type.type);
+    if (expected_class_type == nullptr || actual_class_type == nullptr) {
+      return false;
+    }
+
+    return IsDerivedClassOf(
+        actual_class_type->class_name,
+        expected_class_type->class_name);
   }
 
   std::optional<Type> RequireValueType(
@@ -181,47 +175,51 @@ class TypeCheckerVisitor {
     return evaluated_type;
   }
 
-  void CollectFunctionDeclarations(const List<Statement>& statements) {
-    for (size_t i = 0; i < statements.size(); ++i) {
-      assert(statements[i] != nullptr);
-      CollectFunctionDeclarations(*statements[i]);
+  void ValidateTypeReferences(
+      const Type& type,
+      const ASTNode* node,
+      const std::string& error_context) {
+    if (recovering_from_error_) {
+      return;
     }
-  }
 
-  void CollectFunctionDeclarations(const Statement& statement) {
     std::visit(
         Utils::Overload{
-            [this](const FunctionDeclarationStatement& function_declaration) {
-              function_declarations_.emplace(&function_declaration, &function_declaration);
-              assert(function_declaration.body != nullptr);
-              CollectFunctionDeclarations(function_declaration.body->statements);
+            [](const IntType&) {},
+            [](const BoolType&) {},
+            [this, node, &error_context](const ClassType& class_type) {
+              if (type_definer_.GetClassDeclaration(class_type.class_name) == nullptr) {
+                ReportCodeError(
+                    node,
+                    error_context + ": unknown class type " + class_type.class_name);
+              }
             },
-            [this](const IfStatement& if_statement) {
-              CollectFunctionDeclarations(if_statement);
+            [this, node, &error_context](const ArrayType& array_type) {
+              if (array_type.element_type == nullptr) {
+                throw std::runtime_error("invalid array type");
+              }
+
+              ValidateTypeReferences(*array_type.element_type, node, error_context);
             },
-            [this](const Block& block) {
-              CollectFunctionDeclarations(block.statements);
-            },
-            [](const auto&) {
+            [this, node, &error_context](const FuncType& function_type) {
+              for (size_t i = 0; i < function_type.parameter_types.size(); ++i) {
+                ValidateTypeReferences(
+                    function_type.parameter_types[i],
+                    node,
+                    error_context);
+                if (recovering_from_error_) {
+                  return;
+                }
+              }
+
+              if (function_type.return_type != nullptr) {
+                ValidateTypeReferences(
+                    *function_type.return_type,
+                    node,
+                    error_context);
+              }
             }},
-        statement.value);
-  }
-
-  void CollectFunctionDeclarations(const IfStatement& if_statement) {
-    assert(if_statement.true_block != nullptr);
-    assert(if_statement.else_tail != nullptr);
-    CollectFunctionDeclarations(if_statement.true_block->statements);
-    CollectFunctionDeclarations(*if_statement.else_tail);
-  }
-
-  void CollectFunctionDeclarations(const ElseTail& else_tail) {
-    if (else_tail.else_if != nullptr) {
-      CollectFunctionDeclarations(*else_tail.else_if);
-    }
-
-    if (else_tail.else_block != nullptr) {
-      CollectFunctionDeclarations(else_tail.else_block->statements);
-    }
+        type.type);
   }
 
   void VisitStatements(const List<Statement>& statements) {
@@ -240,6 +238,9 @@ class TypeCheckerVisitor {
             },
             [this](const FunctionDeclarationStatement& function_declaration) {
               VisitFunctionDeclarationStatement(function_declaration);
+            },
+            [this](const ClassDeclarationStatement& class_declaration) {
+              VisitClassDeclarationStatement(class_declaration);
             },
             [this](const AssignmentStatement& assignment) {
               VisitAssignmentStatement(assignment);
@@ -263,6 +264,14 @@ class TypeCheckerVisitor {
   }
 
   void VisitDeclarationStatement(const DeclarationStatement& declaration) {
+    ValidateTypeReferences(
+        declaration.type,
+        &declaration,
+        "Declaration type");
+    if (recovering_from_error_) {
+      return;
+    }
+
     if (declaration.initializer == nullptr) {
       return;
     }
@@ -273,7 +282,7 @@ class TypeCheckerVisitor {
       return;
     }
 
-    if (!AreTypesEqual(*initializer_type, declaration.type)) {
+    if (!IsTypeAssignable(declaration.type, *initializer_type)) {
       ReportCodeError(
           &declaration,
           "Type mismatch in declaration of " + declaration.variable_name +
@@ -282,22 +291,83 @@ class TypeCheckerVisitor {
     }
   }
 
-  void VisitFunctionDeclarationStatement(
+  void VisitFunctionDeclarationStatementBody(
       const FunctionDeclarationStatement& function_declaration) {
     assert(function_declaration.body != nullptr);
+
+    for (size_t i = 0; i < function_declaration.parameters.size(); ++i) {
+      ValidateTypeReferences(
+          function_declaration.parameters[i].type,
+          &function_declaration.parameters[i],
+          "Function parameter type");
+      if (recovering_from_error_) {
+        return;
+      }
+    }
+
+    if (function_declaration.return_type.has_value()) {
+      ValidateTypeReferences(
+          *function_declaration.return_type,
+          &function_declaration,
+          "Function return type");
+      if (recovering_from_error_) {
+        return;
+      }
+    }
+
     function_return_type_stack_.push_back(function_declaration.return_type);
     VisitStatements(function_declaration.body->statements);
     function_return_type_stack_.pop_back();
   }
 
+  void VisitFunctionDeclarationStatement(
+      const FunctionDeclarationStatement& function_declaration) {
+    const ClassDeclarationStatement* previous_method_owner_class =
+        current_method_owner_class_;
+    current_method_owner_class_ = nullptr;
+    VisitFunctionDeclarationStatementBody(function_declaration);
+    current_method_owner_class_ = previous_method_owner_class;
+  }
+
+  void VisitMethodDeclarationStatement(
+      const FunctionDeclarationStatement& method_declaration,
+      const ClassDeclarationStatement& class_declaration) {
+    const ClassDeclarationStatement* previous_method_owner_class =
+        current_method_owner_class_;
+    current_method_owner_class_ = &class_declaration;
+    VisitFunctionDeclarationStatementBody(method_declaration);
+    current_method_owner_class_ = previous_method_owner_class;
+  }
+
+  void VisitClassDeclarationStatement(
+      const ClassDeclarationStatement& class_declaration) {
+    if (class_declaration.base_class_name.has_value()) {
+      if (type_definer_.GetClassDeclaration(*class_declaration.base_class_name) == nullptr) {
+        ReportCodeError(
+            &class_declaration,
+            "Unknown base class: " + *class_declaration.base_class_name);
+      }
+    }
+
+    for (size_t i = 0; i < class_declaration.fields.size(); ++i) {
+      recovering_from_error_ = false;
+      VisitDeclarationStatement(class_declaration.fields[i]);
+    }
+
+    for (size_t i = 0; i < class_declaration.methods.size(); ++i) {
+      recovering_from_error_ = false;
+      VisitMethodDeclarationStatement(class_declaration.methods[i], class_declaration);
+    }
+  }
+
   void VisitAssignmentStatement(const AssignmentStatement& assignment) {
     assert(assignment.expr != nullptr);
 
-    const std::optional<ResolvedSymbol> resolved_symbol = ResolveUsedSymbol(
+    const UseResolver::ResolvedSymbol* resolved_symbol = ResolveUsedSymbol(
         assignment.variable_name,
         &assignment,
         "Assignment");
-    if (recovering_from_error_ || !resolved_symbol.has_value()) {
+    if (recovering_from_error_) {
       return;
     }
 
@@ -307,11 +377,11 @@ class TypeCheckerVisitor {
       return;
     }
 
-    if (!AreTypesEqual(*value_type, resolved_symbol->symbol_data->type)) {
+    if (!IsTypeAssignable(resolved_symbol->symbol_data.type, *value_type)) {
       ReportCodeError(
           &assignment,
           "Type mismatch in assignment to " + assignment.variable_name +
-          ": expected " + TypeToString(resolved_symbol->symbol_data->type) +
+          ": expected " + TypeToString(resolved_symbol->symbol_data.type) +
           ", got " + TypeToString(*value_type));
     }
   }
@@ -385,7 +455,7 @@ class TypeCheckerVisitor {
       return;
     }
 
-    if (!AreTypesEqual(*actual_type, *expected_type)) {
+    if (!IsTypeAssignable(*expected_type, *actual_type)) {
       ReportCodeError(
           &return_statement,
           "Return type mismatch: expected " + TypeToString(*expected_type) +
@@ -410,15 +480,11 @@ class TypeCheckerVisitor {
         Utils::Overload{
             [this](const IdentifierExpression& identifier_expression)
                 -> std::optional<Type> {
-              const std::optional<ResolvedSymbol> resolved_symbol = ResolveUsedSymbol(
+              const UseResolver::ResolvedSymbol* resolved_symbol = ResolveUsedSymbol(
                   identifier_expression.name,
                   &identifier_expression,
                   "Identifier");
-              if (!resolved_symbol.has_value()) {
-                return std::nullopt;
-              }
-
-              return resolved_symbol->symbol_data->type;
+              return resolved_symbol->symbol_data.type;
             },
             [](const LiteralExpression& literal_expression) -> std::optional<Type> {
               return std::visit(
@@ -433,6 +499,12 @@ class TypeCheckerVisitor {
             },
             [this](const FunctionCall& function_call) -> std::optional<Type> {
               return EvaluateFunctionCallType(function_call);
+            },
+            [this](const FieldAccess& field_access) -> std::optional<Type> {
+              return EvaluateFieldAccessType(field_access);
+            },
+            [this](const MethodCall& method_call) -> std::optional<Type> {
+              return EvaluateMethodCallType(method_call);
             },
             [this]<UnaryExpressionNode Node>(const Node& unary_expression)
                 -> std::optional<Type> {
@@ -480,7 +552,7 @@ class TypeCheckerVisitor {
       return std::nullopt;
     }
 
-    if (!AreTypesEqual(*left_type, *right_type)) {
+    if (*left_type != *right_type) {
       ReportCodeError(
           &binary_expression,
           "Binary expression type mismatch: left is " + TypeToString(*left_type) +
@@ -569,7 +641,7 @@ class TypeCheckerVisitor {
     }
 
     const Type& expected_type = function_type.parameter_types[parameter_index];
-    if (!AreTypesEqual(*argument_type, expected_type)) {
+    if (!IsTypeAssignable(expected_type, *argument_type)) {
       ReportCodeError(
           &named_argument,
           "Type mismatch in named argument " + named_argument.name +
@@ -609,7 +681,7 @@ class TypeCheckerVisitor {
     }
 
     const Type& expected_type = function_type.parameter_types[state.positional_index];
-    if (!AreTypesEqual(*argument_type, expected_type)) {
+    if (!IsTypeAssignable(expected_type, *argument_type)) {
       ReportCodeError(
           &positional_argument,
           "Type mismatch in positional argument " +
@@ -669,24 +741,119 @@ class TypeCheckerVisitor {
     }
   }
 
+  std::optional<Type> EvaluateFieldAccessType(const FieldAccess& field_access) {
+    const UseResolver::ResolvedSymbol* resolved_receiver = ResolveUsedSymbol(
+        field_access.object_name.name,
+        &field_access.object_name,
+        "Field access receiver");
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
+
+    const auto* receiver_class_type =
+        std::get_if<ClassType>(&resolved_receiver->symbol_data.type.type);
+    if (receiver_class_type == nullptr) {
+      ReportCodeError(
+          &field_access,
+          "Field access receiver is not a class object: " + field_access.object_name.name);
+      return std::nullopt;
+    }
+
+    if (current_method_owner_class_ == nullptr) {
+      ReportCodeError(
+          &field_access,
+          "Field access is allowed only inside class methods");
+      return std::nullopt;
+    }
+
+    if (receiver_class_type->class_name != current_method_owner_class_->class_name) {
+      ReportCodeError(
+          &field_access,
+          "Field access is allowed only for objects of the current class type");
+      return std::nullopt;
+    }
+
+    const UseResolver::ResolvedSymbol* resolved_field = ResolveUsedSymbol(
+        field_access.field_name.name,
+        &field_access.field_name,
+        "Field access");
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
+
+    if (resolved_field->symbol_data.kind != SymbolKind::Variable) {
+      throw std::runtime_error("resolver is incorrect for this program");
+    }
+
+    return resolved_field->symbol_data.type;
+  }
+
+  std::optional<Type> EvaluateMethodCallType(const MethodCall& method_call) {
+    const UseResolver::ResolvedSymbol* resolved_receiver = ResolveUsedSymbol(
+        method_call.object_name.name,
+        &method_call.object_name,
+        "Method call receiver");
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
+
+    const auto* receiver_class_type =
+        std::get_if<ClassType>(&resolved_receiver->symbol_data.type.type);
+    if (receiver_class_type == nullptr) {
+      ReportCodeError(
+          &method_call,
+          "Method call receiver is not a class object: " + method_call.object_name.name);
+      return std::nullopt;
+    }
+
+    const UseResolver::ResolvedSymbol* resolved_method = ResolveUsedSymbol(
+        method_call.function_call.function_name,
+        &method_call.function_call,
+        "Method call");
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
+
+    if (resolved_method->symbol_data.kind != SymbolKind::Function) {
+      throw std::runtime_error("resolver is incorrect for this program");
+    }
+
+    const auto* method_type_ptr =
+        std::get_if<FuncType>(&resolved_method->symbol_data.type.type);
+    if (method_type_ptr == nullptr) {
+      throw std::runtime_error("resolver is incorrect for this program");
+    }
+
+    const FuncType& method_type = *method_type_ptr;
+    const FunctionDeclarationStatement* method_declaration =
+        GetFunctionDeclaration(resolved_method->definition_node);
+    TypeCheckCallArguments(method_call.function_call, method_type, *method_declaration);
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
+
+    if (method_type.return_type == nullptr) {
+      return std::nullopt;
+    }
+
+    return *method_type.return_type;
+  }
+
   std::optional<Type> EvaluateFunctionCallType(const FunctionCall& function_call) {
-    const std::optional<ResolvedSymbol> resolved_symbol = ResolveUsedSymbol(
+    const UseResolver::ResolvedSymbol* resolved_symbol = ResolveUsedSymbol(
         function_call.function_name,
         &function_call,
         "Function call");
-    if (recovering_from_error_ || !resolved_symbol.has_value()) {
+    if (recovering_from_error_) {
       return std::nullopt;
     }
 
-    if (resolved_symbol->symbol_data->kind != SymbolKind::Function) {
-      ReportCodeError(
-          &function_call,
-          function_call.function_name + " is not a function");
-      return std::nullopt;
+    if (resolved_symbol->symbol_data.kind != SymbolKind::Function) {
+      throw std::runtime_error("resolver is incorrect for this program");
     }
 
     const auto* function_type_ptr =
-        std::get_if<FuncType>(&resolved_symbol->symbol_data->type.type);
+        std::get_if<FuncType>(&resolved_symbol->symbol_data.type.type);
     if (function_type_ptr == nullptr) {
       throw std::runtime_error(
           "symbol table is incorrect for this program");
@@ -712,11 +879,11 @@ class TypeCheckerVisitor {
 
   const Program& program_;
   const UseResolver& use_resolver_;
-  const SymbolTable& symbol_table_;
+  const TypeDefiner& type_definer_;
   DebugCtx& debug_ctx_;
   bool recovering_from_error_ = false;
-  std::map<const ASTNode*, const FunctionDeclarationStatement*> function_declarations_;
   std::vector<std::optional<Type>> function_return_type_stack_;
+  const ClassDeclarationStatement* current_method_owner_class_ = nullptr;
 };
 
 }  // namespace
@@ -724,18 +891,22 @@ class TypeCheckerVisitor {
 void CheckTypes(
     const Program& program,
     const UseResolver& use_resolver,
-    const SymbolTable& symbol_table,
+    const TypeDefiner& type_definer,
     DebugCtx& debug_ctx) {
-  TypeCheckerVisitor visitor(program, use_resolver, symbol_table, debug_ctx);
+  TypeCheckerVisitor visitor(
+      program,
+      use_resolver,
+      type_definer,
+      debug_ctx);
   visitor.Check();
 }
 
 void CheckTypes(
     const Program& program,
     const UseResolver& use_resolver,
-    const SymbolTable& symbol_table) {
+    const TypeDefiner& type_definer) {
   DebugCtx debug_ctx;
-  CheckTypes(program, use_resolver, symbol_table, debug_ctx);
+  CheckTypes(program, use_resolver, type_definer, debug_ctx);
   if (debug_ctx.GetErrors().HasErrors()) {
     debug_ctx.GetErrors().ThrowErrors();
   }

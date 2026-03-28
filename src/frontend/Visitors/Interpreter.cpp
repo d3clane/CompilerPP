@@ -8,6 +8,7 @@
 #include <variant>
 
 #include "SemanticAnalysis/Resolver.hpp"
+#include "SemanticAnalysis/StatementNumerizer.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "Utils/Overload.hpp"
 
@@ -18,6 +19,23 @@ namespace {
 [[noreturn]] void ThrowFunctionCallNotSupported(const FunctionCall& function_call) {
   throw std::runtime_error(
       "Function calls are not supported by interpreter: " + function_call.function_name);
+}
+
+[[noreturn]] void ThrowFieldAccessNotSupported(const FieldAccess& field_access) {
+  throw std::runtime_error(
+      "Field access is not supported by interpreter: " +
+      field_access.object_name.name + "." + field_access.field_name.name);
+}
+
+[[noreturn]] void ThrowMethodCallNotSupported(const MethodCall& method_call) {
+  throw std::runtime_error(
+      "Method calls are not supported by interpreter: " +
+      method_call.object_name.name + "." + method_call.function_call.function_name);
+}
+
+[[noreturn]] void ThrowClassNotSupported(const std::string& class_name) {
+  throw std::runtime_error(
+      "Classes are not supported by interpreter: " + class_name);
 }
 
 bool EvaluateEquality(const RuntimeValue& left, const RuntimeValue& right, bool negated) {
@@ -183,6 +201,12 @@ RuntimeValue EvaluateExpression(const Expression& expression, const InterpreterR
           },
           [](const FunctionCall& function_call) -> RuntimeValue {
             ThrowFunctionCallNotSupported(function_call);
+          },
+          [](const FieldAccess& field_access) -> RuntimeValue {
+            ThrowFieldAccessNotSupported(field_access);
+          },
+          [](const MethodCall& method_call) -> RuntimeValue {
+            ThrowMethodCallNotSupported(method_call);
           }},
       expression.value);
 }
@@ -297,6 +321,9 @@ void ExecuteStatement(
           [](const FunctionDeclarationStatement&) {
             // Function bodies are not executed during declaration.
           },
+          [](const ClassDeclarationStatement& class_declaration) {
+            ThrowClassNotSupported(class_declaration.class_name);
+          },
           [&runtime](const AssignmentStatement& assignment) {
             ExecuteAssignment(assignment, runtime);
           },
@@ -328,7 +355,8 @@ void ExecuteBlock(const Block& block, InterpreterRuntime& runtime, std::ostream&
 }  // namespace
 
 InterpreterContext Interpret(const Program& program, std::ostream& output) {
-  SymbolTable symbol_table = BuildSymbolTable(program);
+  StatementNumerizer numerizer = BuildStatementNumerizer(program);
+  SymbolTable symbol_table = BuildSymbolTable(program, std::move(numerizer));
   UseResolver use_resolver = BuildUseResolver(program, symbol_table);
 
   InterpreterContext context;
@@ -346,13 +374,20 @@ InterpreterContext Interpret(const Program& program, std::ostream& output) {
 
     const auto* function_declaration =
         std::get_if<FunctionDeclarationStatement>(&program.top_statements[i]->value);
-    if (function_declaration == nullptr) {
-      throw std::runtime_error("Top-level statement is not declaration");
+    if (function_declaration != nullptr) {
+      if (function_declaration->function_name == "main") {
+        main_function = function_declaration;
+      }
+      continue;
     }
 
-    if (function_declaration->function_name == "main") {
-      main_function = function_declaration;
+    const auto* class_declaration =
+        std::get_if<ClassDeclarationStatement>(&program.top_statements[i]->value);
+    if (class_declaration != nullptr) {
+      ThrowClassNotSupported(class_declaration->class_name);
     }
+
+    throw std::runtime_error("Top-level statement is not declaration");
   }
 
   if (main_function != nullptr) {

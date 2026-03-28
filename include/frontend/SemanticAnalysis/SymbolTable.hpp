@@ -7,10 +7,12 @@
 #include <vector>
 
 #include "Parsing/Ast.hpp"
+#include "SemanticAnalysis/StatementNumerizer.hpp"
 
 namespace Parsing {
 
 class DebugCtx;
+class TypeDefiner;
 
 struct SymbolDebugInfo {
   std::string context;
@@ -21,6 +23,7 @@ struct SymbolDebugInfo {
 enum class SymbolKind {
   Variable,
   Function,
+  Class,
   Parameter,
 };
 
@@ -30,11 +33,12 @@ struct SymbolData {
   bool is_mutable;
   SymbolDebugInfo debug_info;
   const ASTNode* declaration_node;
-  size_t in_scope_stmt_id;
+  StatementNumerizer::ScopedStmtRef declaration_ref;
   SymbolKind kind;
 
   static bool CanBeShadowed(const SymbolData& symbol_data) {
-    return symbol_data.kind != SymbolKind::Function;
+    return symbol_data.kind != SymbolKind::Function &&
+           symbol_data.kind != SymbolKind::Class;
   }
 
   friend bool operator==(const SymbolData& left, const SymbolData& right) = default;
@@ -46,7 +50,6 @@ class LocalSymbolTable {
 
   explicit LocalSymbolTable(LocalSymbolTable* parent);
 
-  const SymbolData* GetSymbolInfo(const std::string& name) const;
   const SymbolData* GetSymbolInfoInLocalScope(const std::string& name) const;
   ErrorMsg AddSymbolInfo(SymbolData symbol_data);
   LocalSymbolTable* GetParent() const;
@@ -65,18 +68,40 @@ class SymbolTable {
   void AddTable(const ASTNode* node, LocalSymbolTable& table);
 
   const LocalSymbolTable* GetTable(const ASTNode* node) const;
-
-  const SymbolData* GetSymbolInfoInLocalScope(
-      const std::string& name,
-      const ASTNode* node) const;
-
-  const SymbolData* GetSymbolInfo(const std::string& name, const ASTNode* node) const;
+  const ASTNode* GetScopeOwner(const LocalSymbolTable* table) const;
+  void SetStatementNumerizer(StatementNumerizer numerizer);
+  const StatementNumerizer* GetStatementNumerizer() const;
 
  private:
   std::map<const ASTNode*, LocalSymbolTable*> table_by_node_;
+  std::map<const LocalSymbolTable*, const ASTNode*> owner_by_table_;
   std::vector<std::unique_ptr<LocalSymbolTable>> owned_tables_;
+  std::unique_ptr<StatementNumerizer> statement_numerizer_;
 };
 
+SymbolTable BuildSymbolTable(
+    const Program& program,
+    const TypeDefiner& type_definer,
+    StatementNumerizer numerizer,
+    DebugCtx& debug_ctx);
+SymbolTable BuildSymbolTable(
+    const Program& program,
+    const TypeDefiner& type_definer,
+    StatementNumerizer numerizer);
+SymbolTable BuildSymbolTable(
+    const Program& program,
+    const TypeDefiner& type_definer,
+    DebugCtx& debug_ctx);
+SymbolTable BuildSymbolTable(
+    const Program& program,
+    const TypeDefiner& type_definer);
+SymbolTable BuildSymbolTable(
+    const Program& program,
+    StatementNumerizer numerizer,
+    DebugCtx& debug_ctx);
+SymbolTable BuildSymbolTable(
+    const Program& program,
+    StatementNumerizer numerizer);
 SymbolTable BuildSymbolTable(const Program& program, DebugCtx& debug_ctx);
 SymbolTable BuildSymbolTable(const Program& program);
 

@@ -4,7 +4,7 @@
 
 #include "Parsing/Ast.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
-#include "SemanticAnalysis/SymbolTable.hpp"
+#include "SemanticAnalysis/TypeDefiner.hpp"
 
 namespace Parsing {
 
@@ -74,12 +74,12 @@ constexpr bool IsSupportedExprOp() {
 void CheckTypes(
     const Program& program,
     const UseResolver& use_resolver,
-    const SymbolTable& symbol_table,
+    const TypeDefiner& type_definer,
     DebugCtx& debug_ctx);
 
 void CheckTypes(
     const Program& program,
     const UseResolver& use_resolver,
-    const SymbolTable& symbol_table);
+    const TypeDefiner& type_definer);
 
 }  // namespace Parsing

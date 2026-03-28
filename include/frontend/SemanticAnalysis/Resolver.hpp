@@ -13,6 +13,11 @@ class DebugCtx;
 
 class UseResolver {
  public:
+  struct ResolvedSymbol {
+    const ASTNode* definition_node = nullptr;
+    SymbolData symbol_data;
+  };
+
   struct Use {
     const ASTNode* node;
     std::string used_ident_name;
@@ -26,12 +31,15 @@ class UseResolver {
     }
   };
 
+  const ResolvedSymbol* GetResolvedSymbol(
+      const std::string& name,
+      const ASTNode* curr_node) const;
   const ASTNode* GetUsedVarDef(const std::string& name, const ASTNode* curr_node) const;
 
  private:
   UseResolver() = default;
 
-  std::map<Use, const ASTNode*> use_to_definition_;
+  std::map<Use, ResolvedSymbol> use_to_resolved_symbol_;
 
   friend UseResolver BuildUseResolver(
       const Program& program,

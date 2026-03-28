@@ -412,6 +412,77 @@ TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
   EXPECT_TRUE(*second_named_bool_value);
 }
 
+TEST(ParserTreeTests, ParsesMethodCallExpression) {
+  const std::string source =
+      "class Box { func get(v int) int { return v; } }\n"
+      "var box Box;\n"
+      "func main() { box.get(7); }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+
+  ASSERT_EQ(program.top_statements.size(), 3u);
+  ASSERT_NE(program.top_statements[2], nullptr);
+
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[2]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
+  const auto* expression_statement =
+      std::get_if<Parsing::Expression>(&main_function->body->statements[0]->value);
+  ASSERT_NE(expression_statement, nullptr);
+
+  const auto* method_call =
+      std::get_if<Parsing::MethodCall>(&expression_statement->value);
+  ASSERT_NE(method_call, nullptr);
+  EXPECT_EQ(method_call->object_name.name, "box");
+  EXPECT_EQ(method_call->function_call.function_name, "get");
+  ASSERT_EQ(method_call->function_call.arguments.size(), 1u);
+  ASSERT_NE(method_call->function_call.arguments[0], nullptr);
+
+  const auto* positional_argument =
+      std::get_if<Parsing::PositionalCallArgument>(method_call->function_call.arguments[0].get());
+  ASSERT_NE(positional_argument, nullptr);
+  ASSERT_NE(positional_argument->value, nullptr);
+  const int* literal_value = GetIntLiteralValue(positional_argument->value);
+  ASSERT_NE(literal_value, nullptr);
+  EXPECT_EQ(*literal_value, 7);
+
+  EXPECT_EQ(Parsing::PrintInfix(program), source);
+}
+
+TEST(ParserTreeTests, ParsesFieldAccessExpression) {
+  const std::string source =
+      "class Box { var value int; func get(other Box) int { return other.value; } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+
+  ASSERT_EQ(program.top_statements.size(), 1u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  const auto* box_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(box_class, nullptr);
+  ASSERT_EQ(box_class->methods.size(), 1u);
+  ASSERT_NE(box_class->methods[0].body, nullptr);
+  ASSERT_EQ(box_class->methods[0].body->statements.size(), 1u);
+  ASSERT_NE(box_class->methods[0].body->statements[0], nullptr);
+
+  const auto* return_statement =
+      std::get_if<Parsing::ReturnStatement>(&box_class->methods[0].body->statements[0]->value);
+  ASSERT_NE(return_statement, nullptr);
+  ASSERT_NE(return_statement->expr, nullptr);
+
+  const auto* field_access =
+      std::get_if<Parsing::FieldAccess>(&return_statement->expr->value);
+  ASSERT_NE(field_access, nullptr);
+  EXPECT_EQ(field_access->object_name.name, "other");
+  EXPECT_EQ(field_access->field_name.name, "value");
+
+  EXPECT_EQ(Parsing::PrintInfix(program), source);
+}
+
 TEST(ParserTreeTests, PrintsProgramInInfixOrder) {
   const std::string source =
       "var mutable x int = 1 + 2;\n"
@@ -458,6 +529,57 @@ TEST(ParserTreeTests, ReportsMultipleLexerAndParserErrorsTogether) {
     EXPECT_NE(message.find("Parse error"), std::string::npos);
     EXPECT_NE(message.find("broken.cgor"), std::string::npos);
   }
+}
+
+TEST(ParserTreeTests, ParsesClassInheritanceAndArrayFields) {
+  const std::string source =
+      "class Base { var id int; func getId() int { return id; } }\n"
+      "class Derived:Base { var items int[]; var parent Base; func getParent() Base { return parent; } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+
+  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  ASSERT_NE(program.top_statements[1], nullptr);
+
+  const auto* base_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(base_class, nullptr);
+  EXPECT_EQ(base_class->class_name, "Base");
+  EXPECT_FALSE(base_class->base_class_name.has_value());
+  ASSERT_EQ(base_class->fields.size(), 1u);
+  ASSERT_EQ(base_class->methods.size(), 1u);
+  EXPECT_EQ(base_class->fields[0].variable_name, "id");
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(base_class->fields[0].type.type));
+
+  const auto* derived_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(derived_class, nullptr);
+  EXPECT_EQ(derived_class->class_name, "Derived");
+  ASSERT_TRUE(derived_class->base_class_name.has_value());
+  EXPECT_EQ(*derived_class->base_class_name, "Base");
+  ASSERT_EQ(derived_class->fields.size(), 2u);
+  ASSERT_EQ(derived_class->methods.size(), 1u);
+
+  const auto* array_type =
+      std::get_if<Parsing::ArrayType>(&derived_class->fields[0].type.type);
+  ASSERT_NE(array_type, nullptr);
+  ASSERT_NE(array_type->element_type, nullptr);
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(array_type->element_type->type));
+
+  const auto* class_type =
+      std::get_if<Parsing::ClassType>(&derived_class->fields[1].type.type);
+  ASSERT_NE(class_type, nullptr);
+  EXPECT_EQ(class_type->class_name, "Base");
+}
+
+TEST(ParserTreeTests, RejectsClassBodyWithMethodBeforeField) {
+  const std::string source =
+      "class Broken { func f() { } var x int; }\n";
+
+  EXPECT_THROW(
+      static_cast<void>(Parsing::ParseSource(source)),
+      std::runtime_error);
 }
 
 }  // namespace

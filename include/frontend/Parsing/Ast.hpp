@@ -66,7 +66,9 @@ struct LessExpression;
 struct GreaterExpression;
 struct LessEqualExpression;
 struct GreaterEqualExpression;
+struct FieldAccess;
 struct FunctionCall;
+struct MethodCall;
 
 struct UnaryOperationBase : ASTNode {
   UnaryOperationBase() = default;
@@ -239,6 +241,32 @@ struct FunctionCall : ASTNode {
   ADD_OPERATOR_EQUAL(FunctionCall)
 };
 
+struct FieldAccess : ASTNode {
+  FieldAccess() = default;
+
+  FieldAccess(IdentifierExpression object_name_in, IdentifierExpression field_name_in)
+      : object_name(std::move(object_name_in)),
+        field_name(std::move(field_name_in)) {}
+
+  IdentifierExpression object_name;
+  IdentifierExpression field_name;
+
+  ADD_OPERATOR_EQUAL(FieldAccess)
+};
+
+struct MethodCall : ASTNode {
+  MethodCall() = default;
+
+  MethodCall(IdentifierExpression object_name_in, FunctionCall function_call_in)
+      : object_name(std::move(object_name_in)),
+        function_call(std::move(function_call_in)) {}
+
+  IdentifierExpression object_name;
+  FunctionCall function_call;
+
+  ADD_OPERATOR_EQUAL(MethodCall)
+};
+
 using ExpressionVariant = std::variant<
     IdentifierExpression,
     LiteralExpression,
@@ -258,7 +286,9 @@ using ExpressionVariant = std::variant<
     GreaterExpression,
     LessEqualExpression,
     GreaterEqualExpression,
-    FunctionCall>;
+    FieldAccess,
+    FunctionCall,
+    MethodCall>;
 
 struct Expression : ASTNode {
   Expression() = default;
@@ -368,6 +398,27 @@ struct DeclarationStatement : ASTNode {
   ADD_OPERATOR_EQUAL(DeclarationStatement)
 };
 
+struct ClassDeclarationStatement : ASTNode {
+  ClassDeclarationStatement() = default;
+
+  ClassDeclarationStatement(
+      std::string class_name_in,
+      std::optional<std::string> base_class_name_in,
+      std::vector<DeclarationStatement> fields_in,
+      std::vector<FunctionDeclarationStatement> methods_in)
+      : class_name(std::move(class_name_in)),
+        base_class_name(std::move(base_class_name_in)),
+        fields(std::move(fields_in)),
+        methods(std::move(methods_in)) {}
+
+  std::string class_name;
+  std::optional<std::string> base_class_name;
+  std::vector<DeclarationStatement> fields;
+  std::vector<FunctionDeclarationStatement> methods;
+
+  ADD_OPERATOR_EQUAL(ClassDeclarationStatement)
+};
+
 struct IfStatement : ASTNode {
   IfStatement() = default;
 
@@ -415,6 +466,7 @@ struct Block : ASTNode {
 using StatementVariant = std::variant<
     DeclarationStatement,
     FunctionDeclarationStatement,
+    ClassDeclarationStatement,
     AssignmentStatement,
     PrintStatement,
     IfStatement,

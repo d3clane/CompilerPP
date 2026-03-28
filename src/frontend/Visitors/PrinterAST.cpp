@@ -12,6 +12,8 @@ std::string PrintType(const Type& type);
 void AppendLine(std::string& output, int indent, const std::string& text);
 void PrintExpressionTree(const Expression& expression, int indent, std::string& output);
 void PrintFunctionCallTree(const FunctionCall& function_call, int indent, std::string& output);
+void PrintFieldAccessTree(const FieldAccess& field_access, int indent, std::string& output);
+void PrintMethodCallTree(const MethodCall& method_call, int indent, std::string& output);
 void PrintBlockTree(const Block& block, int indent, std::string& output);
 void PrintElseTailTree(const ElseTail& else_tail, int indent, std::string& output);
 void PrintIfStatementTree(const IfStatement& if_statement, int indent, std::string& output);
@@ -86,6 +88,16 @@ std::string PrintType(const Type& type) {
       Utils::Overload{
           [](const IntType&) -> std::string { return "int"; },
           [](const BoolType&) -> std::string { return "bool"; },
+          [](const ClassType& class_type) -> std::string {
+            return class_type.class_name;
+          },
+          [](const ArrayType& array_type) -> std::string {
+            if (array_type.element_type == nullptr) {
+              return "<invalid>[]";
+            }
+
+            return PrintType(*array_type.element_type) + "[]";
+          },
           [](const FuncType& func_type) -> std::string {
             std::string result = "func(";
             for (size_t i = 0; i < func_type.parameter_types.size(); ++i) {
@@ -140,6 +152,19 @@ void PrintFunctionCallTree(const FunctionCall& function_call, int indent, std::s
   }
 }
 
+void PrintMethodCallTree(const MethodCall& method_call, int indent, std::string& output) {
+  AppendLine(output, indent, "MethodCall:");
+  AppendLine(output, indent + 1, "Object: " + method_call.object_name.name);
+  AppendLine(output, indent + 1, "Call:");
+  PrintFunctionCallTree(method_call.function_call, indent + 2, output);
+}
+
+void PrintFieldAccessTree(const FieldAccess& field_access, int indent, std::string& output) {
+  AppendLine(output, indent, "FieldAccess:");
+  AppendLine(output, indent + 1, "Object: " + field_access.object_name.name);
+  AppendLine(output, indent + 1, "Field: " + field_access.field_name.name);
+}
+
 void PrintExpressionTree(const Expression& expression, int indent, std::string& output) {
   std::visit(
       Utils::Overload{
@@ -157,6 +182,14 @@ void PrintExpressionTree(const Expression& expression, int indent, std::string& 
           [&output, indent](const FunctionCall& function_call) {
             AppendLine(output, indent, "FunctionCallExpression:");
             PrintFunctionCallTree(function_call, indent + 1, output);
+          },
+          [&output, indent](const FieldAccess& field_access) {
+            AppendLine(output, indent, "FieldAccessExpression:");
+            PrintFieldAccessTree(field_access, indent + 1, output);
+          },
+          [&output, indent](const MethodCall& method_call) {
+            AppendLine(output, indent, "MethodCallExpression:");
+            PrintMethodCallTree(method_call, indent + 1, output);
           },
           [&output, indent]<UnaryExpressionNode Node>(const Node& node) {
             PrintUnaryExpressionTree(node, indent, output);
@@ -256,6 +289,73 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
 
             AppendLine(output, indent + 1, "Body:");
             PrintBlockTree(*function_declaration.body, indent + 2, output);
+          },
+          [&output, indent](const ClassDeclarationStatement& class_declaration) {
+            std::string class_line = "ClassDeclarationStatement: " + class_declaration.class_name;
+            if (class_declaration.base_class_name.has_value()) {
+              class_line += " : " + *class_declaration.base_class_name;
+            }
+            AppendLine(output, indent, class_line);
+
+            AppendLine(output, indent + 1, "Fields:");
+            if (class_declaration.fields.empty()) {
+              AppendLine(output, indent + 2, "<empty>");
+            } else {
+              for (size_t i = 0; i < class_declaration.fields.size(); ++i) {
+                std::string field_line = "Field: ";
+                if (class_declaration.fields[i].is_mutable) {
+                  field_line += "mutable ";
+                }
+                field_line += class_declaration.fields[i].variable_name + " " +
+                              PrintType(class_declaration.fields[i].type);
+                AppendLine(output, indent + 2, field_line);
+
+                if (class_declaration.fields[i].initializer != nullptr) {
+                  AppendLine(output, indent + 3, "Initializer:");
+                  PrintExpressionTree(
+                      *class_declaration.fields[i].initializer,
+                      indent + 4,
+                      output);
+                }
+              }
+            }
+
+            AppendLine(output, indent + 1, "Methods:");
+            if (class_declaration.methods.empty()) {
+              AppendLine(output, indent + 2, "<empty>");
+            } else {
+              for (size_t i = 0; i < class_declaration.methods.size(); ++i) {
+                const FunctionDeclarationStatement& method = class_declaration.methods[i];
+                assert(method.body != nullptr);
+                AppendLine(output, indent + 2, "Method: " + method.function_name);
+
+                AppendLine(output, indent + 3, "Parameters:");
+                if (method.parameters.empty()) {
+                  AppendLine(output, indent + 4, "<empty>");
+                } else {
+                  for (size_t j = 0; j < method.parameters.size(); ++j) {
+                    AppendLine(
+                        output,
+                        indent + 4,
+                        "Parameter: " + method.parameters[j].name +
+                            " " +
+                            PrintType(method.parameters[j].type));
+                  }
+                }
+
+                if (method.return_type.has_value()) {
+                  AppendLine(
+                      output,
+                      indent + 3,
+                      "ReturnType: " + PrintType(*method.return_type));
+                } else {
+                  AppendLine(output, indent + 3, "ReturnType: <empty>");
+                }
+
+                AppendLine(output, indent + 3, "Body:");
+                PrintBlockTree(*method.body, indent + 4, output);
+              }
+            }
           },
           [&output, indent](const AssignmentStatement& assignment) {
             assert(assignment.expr != nullptr);

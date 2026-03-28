@@ -33,10 +33,13 @@ add_library(
   ${BISON_CompilerParser_OUTPUTS}
   ${FLEX_CompilerLexer_OUTPUTS}
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Types.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Printer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Interpreter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/StatementNumerizer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/SymbolTable.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/TypeDefiner.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/Resolver.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/TypeChecker.cpp"
 )

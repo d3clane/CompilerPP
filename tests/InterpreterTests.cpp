@@ -340,6 +340,26 @@ TEST(InterpreterTests, ThrowsOnFunctionCallInsideBoolInitializer) {
   EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
 }
 
+TEST(InterpreterTests, ThrowsOnMethodCallExpression) {
+  const std::string source =
+      "var x int = 1;\n"
+      "func main() { x.foo(); }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
+}
+
+TEST(InterpreterTests, ThrowsOnFieldAccessExpression) {
+  const std::string source =
+      "var x int = 1;\n"
+      "func main() { print(x.y); }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
+}
+
 TEST(InterpreterTests, ThrowsOnPrintOfUnknownVariable) {
   const std::string source = "func main() { print(x); }\n";
 
@@ -350,6 +370,15 @@ TEST(InterpreterTests, ThrowsOnPrintOfUnknownVariable) {
 
 TEST(InterpreterTests, ThrowsOnAssignmentToUndeclaredVariable) {
   const std::string source = "func main() { x = 1; }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
+}
+
+TEST(InterpreterTests, ThrowsOnNestedBlockUseBeforeDefinitionInParentScope) {
+  const std::string source =
+      "func main() { { x = x + 10; } var x int = 0; print(x); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   std::ostringstream output;
@@ -382,6 +411,16 @@ TEST(InterpreterTests, SubtractionLeftRecursionTest) {
   std::ostringstream output;
   Parsing::Interpret(program, output);
   EXPECT_EQ(output.str(), "93\n");
+}
+
+TEST(InterpreterTests, ThrowsWhenProgramContainsClassDeclaration) {
+  const std::string source =
+      "class Node { var value int; }\n"
+      "func main() { }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  EXPECT_THROW(Parsing::Interpret(program, output), std::runtime_error);
 }
 
 }  // namespace

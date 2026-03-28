@@ -1,6 +1,16 @@
 program = decl_stmt* ;
 
-decl_stmt = var_decl | func_decl ;
+decl_stmt = var_decl | func_decl | class_decl ;
+
+class_decl = "class" ident inheritance_opt "{" class_field_decl* class_method_decl* "}" ;
+
+inheritance_opt = ":" ident | \eps ;
+
+# fields are always first in class body
+class_field_decl = var_decl ;
+
+# methods are always after fields in class body
+class_method_decl = func_decl ;
 
 var_decl = "var" mutable_opt ident type init_opt ";" ;
 
@@ -18,7 +28,11 @@ param = ident type ;
 
 return_type_opt = type | \eps ;
 
-type = "int" | "bool" ;
+type = base_type array_suffix_opt ;
+
+base_type = "int" | "bool" | ident ;
+
+array_suffix_opt = "[" "]" | \eps ;
 
 assign_stmt = ident "=" expr ";" ;
 
@@ -39,6 +53,10 @@ block = "{" stmt* "}" ;
 stmt = decl_stmt | assign_stmt | print_stmt | if_stmt | return_stmt | expr_stmt | block ;
 
 func_call = ident "(" call_args_opt ")" ;
+
+field_access = ident "." ident ;
+
+method_call = ident "." func_call ;
 
 call_args_opt = call_args | \eps ;
 
@@ -66,7 +84,10 @@ mul_expr = unary_expr (("*" | "/" | "%") unary_expr)* ;
 
 unary_expr = ("+" | "-" | "!") unary_expr | final_expr ;
 
-final_expr = ident | num | "true" | "false" | func_call | "(" expr ")" ;
+final_expr = ident | num | "true" | "false" | func_call | field_access | method_call | "(" expr ")" ;
 
 # num and ident are tokens got from lexer. I.e. ident is variable, num is number.
 # Therefore won't define it here
+
+# classes are reference objects (not by-value). All methods are virtual.
+# All fields are private, all methods are public.

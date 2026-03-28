@@ -13,10 +13,13 @@ std::string PrintExpressionWithContext(
     int parent_precedence,
     bool is_right_child);
 std::string PrintFunctionCall(const FunctionCall& function_call);
+std::string PrintFieldAccess(const FieldAccess& field_access);
+std::string PrintMethodCall(const MethodCall& method_call);
 std::string PrintBlock(const Block& block);
 std::string PrintIfStatement(const IfStatement& if_statement);
 std::string PrintStatementNode(const Statement& statement);
 std::string PrintType(const Type& type);
+std::string PrintClassDeclarationStatement(const ClassDeclarationStatement& class_declaration);
 
 constexpr int kLogicalOrPrecedence = 1;
 constexpr int kLogicalAndPrecedence = 2;
@@ -113,6 +116,14 @@ std::string PrintType(const Type& type) {
       Utils::Overload{
           [](const IntType&) -> std::string { return "int"; },
           [](const BoolType&) -> std::string { return "bool"; },
+          [](const ClassType& class_type) -> std::string { return class_type.class_name; },
+          [](const ArrayType& array_type) -> std::string {
+            if (array_type.element_type == nullptr) {
+              return "<invalid>[]";
+            }
+
+            return PrintType(*array_type.element_type) + "[]";
+          },
           [](const FuncType& func_type) -> std::string {
             std::string result = "func(";
             for (size_t i = 0; i < func_type.parameter_types.size(); ++i) {
@@ -138,6 +149,8 @@ int GetPrecedence(const Expression& expression) {
           [](const IdentifierExpression&) -> int { return kAtomPrecedence; },
           [](const LiteralExpression&) -> int { return kAtomPrecedence; },
           [](const FunctionCall&) -> int { return kAtomPrecedence; },
+          [](const FieldAccess&) -> int { return kAtomPrecedence; },
+          [](const MethodCall&) -> int { return kAtomPrecedence; },
           []<UnaryExpressionNode Node>(const Node&) -> int { return kUnaryPrecedence; },
           []<BinaryExpressionNode Node>(const Node&) -> int {
             return GetBinaryPrecedence<Node>();
@@ -209,6 +222,15 @@ std::string PrintFunctionCall(const FunctionCall& function_call) {
   return result;
 }
 
+std::string PrintFieldAccess(const FieldAccess& field_access) {
+  return field_access.object_name.name + "." + field_access.field_name.name;
+}
+
+std::string PrintMethodCall(const MethodCall& method_call) {
+  return method_call.object_name.name + "." +
+         PrintFunctionCall(method_call.function_call);
+}
+
 std::string PrintExpressionWithContext(
     const Expression& expression,
     int parent_precedence,
@@ -227,6 +249,12 @@ std::string PrintExpressionWithContext(
           },
           [](const FunctionCall& function_call) -> std::string {
             return PrintFunctionCall(function_call);
+          },
+          [](const FieldAccess& field_access) -> std::string {
+            return PrintFieldAccess(field_access);
+          },
+          [](const MethodCall& method_call) -> std::string {
+            return PrintMethodCall(method_call);
           },
           []<UnaryExpressionNode Node>(const Node& node) -> std::string {
             assert(node.operand != nullptr);
@@ -356,6 +384,28 @@ std::string PrintReturnStatement(const ReturnStatement& return_statement) {
   return "return " + PrintExpression(*return_statement.expr) + ";";
 }
 
+std::string PrintClassDeclarationStatement(
+    const ClassDeclarationStatement& class_declaration) {
+  std::string result = "class " + class_declaration.class_name;
+  if (class_declaration.base_class_name.has_value()) {
+    result += ":" + *class_declaration.base_class_name;
+  }
+
+  result += " { ";
+  for (size_t i = 0; i < class_declaration.fields.size(); ++i) {
+    result += PrintDeclarationStatement(class_declaration.fields[i]);
+    result += " ";
+  }
+
+  for (size_t i = 0; i < class_declaration.methods.size(); ++i) {
+    result += PrintFunctionDeclarationStatement(class_declaration.methods[i]);
+    result += " ";
+  }
+
+  result += "}";
+  return result;
+}
+
 std::string PrintStatementNode(const Statement& statement) {
   return std::visit(
       Utils::Overload{
@@ -364,6 +414,9 @@ std::string PrintStatementNode(const Statement& statement) {
           },
           [](const FunctionDeclarationStatement& function_declaration) -> std::string {
             return PrintFunctionDeclarationStatement(function_declaration);
+          },
+          [](const ClassDeclarationStatement& class_declaration) -> std::string {
+            return PrintClassDeclarationStatement(class_declaration);
           },
           [](const AssignmentStatement& assignment) -> std::string {
             return PrintAssignmentStatement(assignment);
