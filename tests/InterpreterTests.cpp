@@ -301,6 +301,58 @@ TEST(InterpreterTests, AssignmentInsideShadowingBlockDoesNotModifyOuterVariable)
   EXPECT_EQ(*inner_x_value, 3);
 }
 
+TEST(InterpreterTests, ExecutesComplexNestedShadowingWithAssignmentBeforeInnerDeclaration) {
+  const std::string source =
+      "func main() { "
+      "var x int = 0; "
+      "{ "
+      "{ x = x + 10; } "
+      "var x int = 5; "
+      "print(x); "
+      "} "
+      "print(x); "
+      "}\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  std::ostringstream output;
+  const Parsing::InterpreterContext context = Parsing::Interpret(program, output);
+
+  ASSERT_EQ(program.top_statements.size(), 1u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 3u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+  ASSERT_NE(main_function->body->statements[1], nullptr);
+
+  const auto* outer_x_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&main_function->body->statements[0]->value);
+  ASSERT_NE(outer_x_declaration, nullptr);
+
+  const auto* outer_block =
+      std::get_if<Parsing::Block>(&main_function->body->statements[1]->value);
+  ASSERT_NE(outer_block, nullptr);
+  ASSERT_EQ(outer_block->statements.size(), 3u);
+  ASSERT_NE(outer_block->statements[1], nullptr);
+  const auto* inner_x_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&outer_block->statements[1]->value);
+  ASSERT_NE(inner_x_declaration, nullptr);
+
+  EXPECT_EQ(output.str(), "5\n10\n");
+  ASSERT_EQ(context.variables.count(outer_x_declaration), 1);
+  ASSERT_EQ(context.variables.count(inner_x_declaration), 1);
+  const auto* outer_x_value =
+      std::get_if<int>(&context.variables.at(outer_x_declaration));
+  ASSERT_NE(outer_x_value, nullptr);
+  EXPECT_EQ(*outer_x_value, 10);
+  const auto* inner_x_value =
+      std::get_if<int>(&context.variables.at(inner_x_declaration));
+  ASSERT_NE(inner_x_value, nullptr);
+  EXPECT_EQ(*inner_x_value, 5);
+}
+
 TEST(InterpreterTests, ThrowsOnFunctionCallStatement) {
   const std::string source = "func main() { foo(); }\n";
 

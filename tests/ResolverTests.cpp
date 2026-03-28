@@ -253,6 +253,94 @@ TEST(ResolverTests, ThrowsOnNestedBlockUseBeforeDefinitionInParentScope) {
       std::runtime_error);
 }
 
+TEST(ResolverTests, ResolvesComplexNestedShadowingWithAssignmentBeforeInnerDeclaration) {
+  const std::string source =
+      "func main() { "
+      "var x int = 0; "
+      "{ "
+      "{ x = x + 10; } "
+      "var x int = 5; "
+      "print(x); "
+      "} "
+      "print(x); "
+      "}\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+
+  ASSERT_EQ(program.top_statements.size(), 1u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 3u);
+
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+  const auto* outer_x_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&main_function->body->statements[0]->value);
+  ASSERT_NE(outer_x_declaration, nullptr);
+
+  ASSERT_NE(main_function->body->statements[1], nullptr);
+  const auto* outer_block =
+      std::get_if<Parsing::Block>(&main_function->body->statements[1]->value);
+  ASSERT_NE(outer_block, nullptr);
+  ASSERT_EQ(outer_block->statements.size(), 3u);
+
+  ASSERT_NE(outer_block->statements[0], nullptr);
+  const auto* inner_block =
+      std::get_if<Parsing::Block>(&outer_block->statements[0]->value);
+  ASSERT_NE(inner_block, nullptr);
+  ASSERT_EQ(inner_block->statements.size(), 1u);
+  ASSERT_NE(inner_block->statements[0], nullptr);
+  const auto* assignment_statement =
+      std::get_if<Parsing::AssignmentStatement>(&inner_block->statements[0]->value);
+  ASSERT_NE(assignment_statement, nullptr);
+  ASSERT_NE(assignment_statement->expr, nullptr);
+  const auto* add_expression =
+      std::get_if<Parsing::AddExpression>(&assignment_statement->expr->value);
+  ASSERT_NE(add_expression, nullptr);
+  ASSERT_NE(add_expression->left, nullptr);
+  const auto* rhs_identifier = GetIdentifierFromExpression(*add_expression->left);
+  ASSERT_NE(rhs_identifier, nullptr);
+
+  ASSERT_NE(outer_block->statements[1], nullptr);
+  const auto* inner_x_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&outer_block->statements[1]->value);
+  ASSERT_NE(inner_x_declaration, nullptr);
+
+  ASSERT_NE(outer_block->statements[2], nullptr);
+  const auto* inner_print =
+      std::get_if<Parsing::PrintStatement>(&outer_block->statements[2]->value);
+  ASSERT_NE(inner_print, nullptr);
+  ASSERT_NE(inner_print->expr, nullptr);
+  const auto* inner_print_identifier = GetIdentifierFromExpression(*inner_print->expr);
+  ASSERT_NE(inner_print_identifier, nullptr);
+
+  ASSERT_NE(main_function->body->statements[2], nullptr);
+  const auto* outer_print =
+      std::get_if<Parsing::PrintStatement>(&main_function->body->statements[2]->value);
+  ASSERT_NE(outer_print, nullptr);
+  ASSERT_NE(outer_print->expr, nullptr);
+  const auto* outer_print_identifier = GetIdentifierFromExpression(*outer_print->expr);
+  ASSERT_NE(outer_print_identifier, nullptr);
+
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("x", assignment_statement),
+      outer_x_declaration);
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("x", rhs_identifier),
+      outer_x_declaration);
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("x", inner_print_identifier),
+      inner_x_declaration);
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("x", outer_print_identifier),
+      outer_x_declaration);
+}
+
 TEST(ResolverTests, ResolvesMethodCallReceiverVariable) {
   const std::string source =
       "class A { func ping() { } func ring() { } }\n"
@@ -383,6 +471,152 @@ TEST(ResolverTests, ThrowsOnUnknownFieldForReceiverClass) {
   EXPECT_THROW(
       Parsing::BuildUseResolver(program, symbol_table),
       std::runtime_error);
+}
+
+TEST(ResolverTests, ResolvesFunctionCallBeforeFunctionDefinitionInClassScope) {
+  const std::string source =
+      "class A { func first() { second(); } func second() { } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+
+  ASSERT_EQ(program.top_statements.size(), 1u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+
+  const auto* class_declaration =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(class_declaration, nullptr);
+  ASSERT_EQ(class_declaration->methods.size(), 2u);
+  ASSERT_NE(class_declaration->methods[0].body, nullptr);
+  ASSERT_EQ(class_declaration->methods[0].body->statements.size(), 1u);
+  ASSERT_NE(class_declaration->methods[0].body->statements[0], nullptr);
+
+  const auto* expression_statement =
+      std::get_if<Parsing::Expression>(&class_declaration->methods[0].body->statements[0]->value);
+  ASSERT_NE(expression_statement, nullptr);
+  const auto* function_call =
+      std::get_if<Parsing::FunctionCall>(&expression_statement->value);
+  ASSERT_NE(function_call, nullptr);
+
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("second", function_call),
+      &class_declaration->methods[1]);
+}
+
+TEST(ResolverTests, ResolvesBaseMethodCallInsideDerivedMethod) {
+  const std::string source =
+      "class Base { func ping() int { return 1; } }\n"
+      "class Derived:Base { func use_base() int { return ping(); } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+
+  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_NE(program.top_statements[1], nullptr);
+
+  const auto* derived_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(derived_class, nullptr);
+  ASSERT_EQ(derived_class->methods.size(), 1u);
+  ASSERT_NE(derived_class->methods[0].body, nullptr);
+  ASSERT_EQ(derived_class->methods[0].body->statements.size(), 1u);
+  ASSERT_NE(derived_class->methods[0].body->statements[0], nullptr);
+
+  const auto* return_statement =
+      std::get_if<Parsing::ReturnStatement>(&derived_class->methods[0].body->statements[0]->value);
+  ASSERT_NE(return_statement, nullptr);
+  ASSERT_NE(return_statement->expr, nullptr);
+
+  const auto* function_call =
+      std::get_if<Parsing::FunctionCall>(&return_statement->expr->value);
+  ASSERT_NE(function_call, nullptr);
+
+  const auto* base_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(base_class, nullptr);
+  ASSERT_EQ(base_class->methods.size(), 1u);
+
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("ping", function_call),
+      &base_class->methods[0]);
+}
+
+TEST(ResolverTests, ResolvesBaseFieldUseInsideDerivedMethod) {
+  const std::string source =
+      "class Base { var x int; }\n"
+      "class Derived:Base { func get() int { return x; } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+
+  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  ASSERT_NE(program.top_statements[1], nullptr);
+
+  const auto* base_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(base_class, nullptr);
+  ASSERT_EQ(base_class->fields.size(), 1u);
+
+  const auto* derived_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(derived_class, nullptr);
+  ASSERT_EQ(derived_class->methods.size(), 1u);
+  ASSERT_NE(derived_class->methods[0].body, nullptr);
+  ASSERT_EQ(derived_class->methods[0].body->statements.size(), 1u);
+  ASSERT_NE(derived_class->methods[0].body->statements[0], nullptr);
+
+  const auto* return_statement =
+      std::get_if<Parsing::ReturnStatement>(&derived_class->methods[0].body->statements[0]->value);
+  ASSERT_NE(return_statement, nullptr);
+  ASSERT_NE(return_statement->expr, nullptr);
+
+  const auto* identifier =
+      std::get_if<Parsing::IdentifierExpression>(&return_statement->expr->value);
+  ASSERT_NE(identifier, nullptr);
+
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("x", identifier),
+      &base_class->fields[0]);
+}
+
+TEST(ResolverTests, ResolvesOverriddenMethodCallFromSiblingMethod) {
+  const std::string source =
+      "class Base { func foo() int { return 1; } }\n"
+      "class Derived:Base { func foo() int { return 2; } func bar() int { return foo(); } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+
+  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* derived_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(derived_class, nullptr);
+  ASSERT_EQ(derived_class->methods.size(), 2u);
+  ASSERT_NE(derived_class->methods[1].body, nullptr);
+  ASSERT_EQ(derived_class->methods[1].body->statements.size(), 1u);
+  ASSERT_NE(derived_class->methods[1].body->statements[0], nullptr);
+
+  const auto* return_statement =
+      std::get_if<Parsing::ReturnStatement>(&derived_class->methods[1].body->statements[0]->value);
+  ASSERT_NE(return_statement, nullptr);
+  ASSERT_NE(return_statement->expr, nullptr);
+  const auto* function_call =
+      std::get_if<Parsing::FunctionCall>(&return_statement->expr->value);
+  ASSERT_NE(function_call, nullptr);
+
+  EXPECT_NE(
+      resolver.GetUsedVarDef("foo", function_call),
+      nullptr);
 }
 
 }  // namespace

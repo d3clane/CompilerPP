@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "Debug/DebugCtx.hpp"
+#include "SemanticAnalysis/StatementNumerizer.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -69,7 +70,8 @@ class TypeCheckerVisitor {
       : program_(program),
         use_resolver_(use_resolver),
         type_definer_(type_definer),
-        debug_ctx_(debug_ctx) {}
+        debug_ctx_(debug_ctx),
+        numerizer_(BuildStatementNumerizer(program)) {}
 
   void Check() {
     VisitStatements(program_.top_statements);
@@ -161,6 +163,42 @@ class TypeCheckerVisitor {
         expected_class_type->class_name);
   }
 
+  bool IsClassTypeVisible(
+      const ClassDeclarationStatement& class_declaration,
+      const ASTNode* use_node) const {
+    const std::optional<StatementNumerizer::ScopedStmtRef> declaration_ref =
+        numerizer_.GetRef(&class_declaration);
+    if (!declaration_ref.has_value()) {
+      throw std::runtime_error("statement numerizer is incorrect for this program");
+    }
+
+    const std::optional<StatementNumerizer::ScopedStmtRef> use_ref =
+        numerizer_.GetRef(use_node);
+    if (!use_ref.has_value()) {
+      throw std::runtime_error("statement numerizer is incorrect for this program");
+    }
+
+    const ASTNode* declaration_scope_owner =
+        numerizer_.GetScopeOwnerFromRef(*declaration_ref);
+    if (declaration_scope_owner == nullptr) {
+      throw std::runtime_error("statement numerizer is incorrect for this program");
+    }
+
+    // Forward class use is allowed in global scope
+    if (declaration_scope_owner == &program_) {
+      return true;
+    }
+
+    const std::optional<StatementNumerizer::ScopedStmtRef> projected_use_ref =
+        numerizer_.ProjectUseToScope(*use_ref, declaration_scope_owner);
+    if (!projected_use_ref.has_value()) {
+      return false;
+    }
+
+    return declaration_ref->stmt_id_in_scope <
+           projected_use_ref->stmt_id_in_scope;
+  }
+
   std::optional<Type> RequireValueType(
       const Expression& expression,
       const std::string& error_context) {
@@ -188,7 +226,10 @@ class TypeCheckerVisitor {
             [](const IntType&) {},
             [](const BoolType&) {},
             [this, node, &error_context](const ClassType& class_type) {
-              if (type_definer_.GetClassDeclaration(class_type.class_name) == nullptr) {
+              const ClassDeclarationStatement* class_declaration =
+                  type_definer_.GetClassDeclaration(class_type.class_name);
+              if (class_declaration == nullptr ||
+                  !IsClassTypeVisible(*class_declaration, node)) {
                 ReportCodeError(
                     node,
                     error_context + ": unknown class type " + class_type.class_name);
@@ -881,6 +922,7 @@ class TypeCheckerVisitor {
   const UseResolver& use_resolver_;
   const TypeDefiner& type_definer_;
   DebugCtx& debug_ctx_;
+  StatementNumerizer numerizer_;
   bool recovering_from_error_ = false;
   std::vector<std::optional<Type>> function_return_type_stack_;
   const ClassDeclarationStatement* current_method_owner_class_ = nullptr;

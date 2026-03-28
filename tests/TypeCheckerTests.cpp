@@ -236,4 +236,89 @@ TEST(TypeCheckerTests, RejectsUnknownFieldForCurrentClassType) {
   ExpectTypeCheckFail(source);
 }
 
+TEST(TypeCheckerTests, RejectsVariableRedefinitionInSameScope) {
+  const std::string source =
+      "func main() { var x int = 1; var x int = 2; }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  EXPECT_ANY_THROW(Parsing::BuildSymbolTable(program));
+}
+
+TEST(TypeCheckerTests, AcceptsUsingGlobalClassTypeBeforeDefinition) {
+  const std::string source =
+      "var head Node;\n"
+      "class Node { var value int; }\n";
+
+  ExpectTypeCheckPass(source);
+}
+
+TEST(TypeCheckerTests, AcceptsUsingLocalClassTypeAfterDefinition) {
+  const std::string source =
+      "func main() { class Local { var value int; } var x Local; }\n";
+
+  ExpectTypeCheckPass(source);
+}
+
+TEST(TypeCheckerTests, RejectsUsingLocalClassTypeBeforeDefinition) {
+  const std::string source =
+      "func main() { var x Local; class Local { var value int; } }\n";
+
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, RejectsArithmeticWithClassTypeReturnedFromFunction) {
+  const std::string source =
+      "class Node { var value int; }\n"
+      "var node Node;\n"
+      "func make() Node { return node; }\n"
+      "func main() { var x int = make() + 1; }\n";
+
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, RejectsArithmeticBetweenBoolAndIntMethodCalls) {
+  const std::string source =
+      "class Ops {\n"
+      "  func as_bool() bool { return true; }\n"
+      "  func as_int() int { return 1; }\n"
+      "  func bad() int { return as_bool() + as_int(); }\n"
+      "}\n";
+
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, RejectsArithmeticBetweenBoolFieldAndIntMethodCall) {
+  const std::string source =
+      "class Box {\n"
+      "  var flag bool;\n"
+      "  func value() int { return 1; }\n"
+      "  func bad() int { return flag + value(); }\n"
+      "}\n";
+
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, RejectsUsingVoidFunctionInArithmeticExpression) {
+  const std::string source =
+      "func noop() { }\n"
+      "func main() { var x int = noop() + 1; }\n";
+
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, AcceptsComplexNestedShadowingWithAssignmentBeforeInnerDeclaration) {
+  const std::string source =
+      "func main() { "
+      "var x int = 0; "
+      "{ "
+      "{ x = x + 10; } "
+      "var x int = 5; "
+      "print(x); "
+      "} "
+      "print(x); "
+      "}\n";
+
+  ExpectTypeCheckPass(source);
+}
+
 }  // namespace
