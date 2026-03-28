@@ -7,6 +7,7 @@
 
 #include "Debug/DebugCtx.hpp"
 #include "Parsing/Parser.hpp"
+#include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
 #include "SemanticAnalysis/StatementNumerizer.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
@@ -63,6 +64,11 @@ int main(int argc, char* argv[]) {
             debug_ctx);
     const Parsing::UseResolver use_resolver =
         Parsing::BuildUseResolver(program, symbol_table, debug_ctx);
+    Parsing::CheckAccessAllowance(
+        program,
+        use_resolver,
+        type_definer,
+        debug_ctx);
     Parsing::CheckTypes(
         program,
         use_resolver,

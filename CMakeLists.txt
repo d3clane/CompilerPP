@@ -41,6 +41,7 @@ add_library(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/SymbolTable.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/TypeDefiner.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/Resolver.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/AccessAllowanceChecker.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/TypeChecker.cpp"
 )
 

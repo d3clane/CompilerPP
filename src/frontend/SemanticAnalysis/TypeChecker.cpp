@@ -363,21 +363,7 @@ class TypeCheckerVisitor {
 
   void VisitFunctionDeclarationStatement(
       const FunctionDeclarationStatement& function_declaration) {
-    const ClassDeclarationStatement* previous_method_owner_class =
-        current_method_owner_class_;
-    current_method_owner_class_ = nullptr;
     VisitFunctionDeclarationStatementBody(function_declaration);
-    current_method_owner_class_ = previous_method_owner_class;
-  }
-
-  void VisitMethodDeclarationStatement(
-      const FunctionDeclarationStatement& method_declaration,
-      const ClassDeclarationStatement& class_declaration) {
-    const ClassDeclarationStatement* previous_method_owner_class =
-        current_method_owner_class_;
-    current_method_owner_class_ = &class_declaration;
-    VisitFunctionDeclarationStatementBody(method_declaration);
-    current_method_owner_class_ = previous_method_owner_class;
   }
 
   void VisitClassDeclarationStatement(
@@ -397,7 +383,7 @@ class TypeCheckerVisitor {
 
     for (size_t i = 0; i < class_declaration.methods.size(); ++i) {
       recovering_from_error_ = false;
-      VisitMethodDeclarationStatement(class_declaration.methods[i], class_declaration);
+      VisitFunctionDeclarationStatementBody(class_declaration.methods[i]);
     }
   }
 
@@ -800,20 +786,6 @@ class TypeCheckerVisitor {
       return std::nullopt;
     }
 
-    if (current_method_owner_class_ == nullptr) {
-      ReportCodeError(
-          &field_access,
-          "Field access is allowed only inside class methods");
-      return std::nullopt;
-    }
-
-    if (receiver_class_type->class_name != current_method_owner_class_->class_name) {
-      ReportCodeError(
-          &field_access,
-          "Field access is allowed only for objects of the current class type");
-      return std::nullopt;
-    }
-
     const UseResolver::ResolvedSymbol* resolved_field = ResolveUsedSymbol(
         field_access.field_name.name,
         &field_access.field_name,
@@ -925,7 +897,6 @@ class TypeCheckerVisitor {
   StatementNumerizer numerizer_;
   bool recovering_from_error_ = false;
   std::vector<std::optional<Type>> function_return_type_stack_;
-  const ClassDeclarationStatement* current_method_owner_class_ = nullptr;
 };
 
 }  // namespace

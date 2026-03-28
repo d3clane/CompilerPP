@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include "Parsing/Parser.hpp"
+#include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "SemanticAnalysis/TypeChecker.hpp"
@@ -27,7 +28,10 @@ void ExpectTypeCheckPass(const std::string& source) {
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   const Parsing::UseResolver resolver =
       Parsing::BuildUseResolver(program, symbol_table);
-  EXPECT_NO_THROW(Parsing::CheckTypes(program, resolver, type_definer));
+  EXPECT_NO_THROW(
+      Parsing::CheckAccessAllowance(program, resolver, type_definer));
+  EXPECT_NO_THROW(
+      Parsing::CheckTypes(program, resolver, type_definer));
 }
 
 void ExpectTypeCheckFail(const std::string& source) {
@@ -38,6 +42,7 @@ void ExpectTypeCheckFail(const std::string& source) {
       {
         const Parsing::UseResolver resolver =
             Parsing::BuildUseResolver(program, symbol_table);
+        Parsing::CheckAccessAllowance(program, resolver, type_definer);
         Parsing::CheckTypes(program, resolver, type_definer);
       },
       std::runtime_error);
@@ -208,6 +213,14 @@ TEST(TypeCheckerTests, AcceptsFieldAccessForSameClassInsideMethod) {
       "class Node { var value int; func read(other Node) int { return other.value; } }\n"
       "var node Node;\n"
       "func main() { var x int = node.read(node); }\n";
+
+  ExpectTypeCheckPass(source);
+}
+
+TEST(TypeCheckerTests, AcceptsBaseFieldAccessInsideDerivedMethod) {
+  const std::string source =
+      "class Base { var x int; }\n"
+      "class Derived:Base { func f(base Base) int { return x + base.x; } }\n";
 
   ExpectTypeCheckPass(source);
 }
