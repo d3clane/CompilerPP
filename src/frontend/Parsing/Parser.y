@@ -7,6 +7,8 @@
 %define api.value.type variant
 %define api.token.constructor
 %define parse.error detailed
+%define api.location.type {Parsing::TokenLocation}
+%locations
 
 %code requires {
 #include <cstddef>
@@ -23,6 +25,12 @@
 
 namespace Parsing {
 
+struct TokenLocation {
+  size_t begin_token_idx = 0;
+  size_t end_token_idx = 0;
+  bool has_value = false;
+};
+
 struct PendingErrorState {
   std::string error_msg;
   size_t invalid_token_idx;
@@ -32,6 +40,7 @@ struct ParserState {
   const std::vector<Tokenizing::TokenVariant>& tokens;
   size_t current_index;
   const std::vector<DebugInfo>* token_debug_infos;
+  ASTDebugInfo* ast_debug_info;
   FrontendErrors* errors;
   std::string filename;
   size_t input_size;
@@ -40,6 +49,20 @@ struct ParserState {
 };
 
 }  // namespace Parsing
+
+#define YYLLOC_DEFAULT(Current, Rhs, N)                                     \
+  do {                                                                      \
+    if ((N) != 0) {                                                         \
+      (Current).begin_token_idx = YYRHSLOC(Rhs, 1).begin_token_idx;         \
+      (Current).end_token_idx = YYRHSLOC(Rhs, N).end_token_idx;             \
+      (Current).has_value =                                                  \
+          YYRHSLOC(Rhs, 1).has_value && YYRHSLOC(Rhs, N).has_value;         \
+    } else {                                                                \
+      (Current).begin_token_idx = YYRHSLOC(Rhs, 0).end_token_idx;           \
+      (Current).end_token_idx = YYRHSLOC(Rhs, 0).end_token_idx;             \
+      (Current).has_value = false;                                          \
+    }                                                                       \
+  } while (false)
 }
 
 %code {
@@ -53,6 +76,59 @@ struct ParserState {
 namespace Parsing {
 
 BisonParser::symbol_type yylex(ParserState& state);
+
+DebugInfo BuildDebugInfoFromLocation(
+    const ParserState& state,
+    const TokenLocation& location) {
+  if (!location.has_value ||
+      state.token_debug_infos == nullptr ||
+      state.token_debug_infos->empty()) {
+    return CreateDebugInfo(
+        state.filename,
+        {0, 0},
+        {0, 0},
+        {0, state.input_size});
+  }
+
+  const size_t max_index = state.token_debug_infos->size() - 1;
+  size_t begin_idx = std::min(location.begin_token_idx, max_index);
+  size_t end_idx = std::min(location.end_token_idx, max_index);
+  if (begin_idx > end_idx) {
+    std::swap(begin_idx, end_idx);
+  }
+
+  const DebugInfo& begin_token_info = (*state.token_debug_infos)[begin_idx];
+  const DebugInfo& end_token_info = (*state.token_debug_infos)[end_idx];
+
+  size_t code_begin = std::min(begin_token_info.code_range.first, state.input_size);
+  size_t code_end = std::min(end_token_info.code_range.second, state.input_size);
+  if (code_end < code_begin) {
+    code_end = code_begin;
+  }
+
+  DebugInfo debug_info = CreateDebugInfo(
+      state.filename,
+      {begin_token_info.line_range.first, end_token_info.line_range.second},
+      {begin_token_info.column_range.first, end_token_info.column_range.second},
+      {code_begin, code_end});
+  if (code_end > code_begin) {
+    debug_info.stressed_chars.push_back({0, code_end - code_begin});
+  }
+  return debug_info;
+}
+
+void AddNodeDebugInfo(
+    ParserState& state,
+    const ASTNode* node,
+    const TokenLocation& location) {
+  if (state.ast_debug_info == nullptr || node == nullptr) {
+    return;
+  }
+
+  state.ast_debug_info->AddDebugInfo(
+      node,
+      BuildDebugInfoFromLocation(state, location));
+}
 
 template <typename T>
 Expression MakeBinaryExpression(Expression left, Expression right) {
@@ -327,6 +403,7 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 program:
     decl_stmt_list {
       output.top_statements = std::move($1);
+      AddNodeDebugInfo(state, &output, @$);
     }
 ;
 
@@ -335,7 +412,9 @@ decl_stmt_list:
       $$ = List<Statement>();
     }
   | decl_stmt_list decl_stmt {
-      $1.push_back(std::make_unique<Statement>(std::move($2)));
+      auto statement = std::make_unique<Statement>(std::move($2));
+      AddNodeDebugInfo(state, statement.get(), @2);
+      $1.push_back(std::move(statement));
       $$ = std::move($1);
     }
   | decl_stmt_list error SEMICOLON {
@@ -350,7 +429,9 @@ stmt_list:
       $$ = List<Statement>();
     }
   | stmt_list stmt {
-      $1.push_back(std::make_unique<Statement>(std::move($2)));
+      auto statement = std::make_unique<Statement>(std::move($2));
+      AddNodeDebugInfo(state, statement.get(), @2);
+      $1.push_back(std::move(statement));
       $$ = std::move($1);
     }
   | stmt_list error SEMICOLON {
@@ -807,142 +888,151 @@ namespace Parsing {
 
 BisonParser::symbol_type yylex(ParserState& state) {
   if (state.current_index >= state.tokens.size()) {
-    return BisonParser::make_YYEOF();
+    return BisonParser::make_YYEOF(TokenLocation{0, 0, false});
   }
 
+  const size_t token_index = state.current_index;
   const Tokenizing::TokenVariant& token = state.tokens[state.current_index];
   ++state.current_index;
+  const TokenLocation location{token_index, token_index, true};
 
   return std::visit(
       Utils::Overload{
-          [](const Tokenizing::VarKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_VAR_KW();
+          [&location](const Tokenizing::VarKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_VAR_KW(location);
           },
-          [](const Tokenizing::IntKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_INT_KW();
+          [&location](const Tokenizing::IntKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_INT_KW(location);
           },
-          [](const Tokenizing::BoolKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_BOOL_KW();
+          [&location](const Tokenizing::BoolKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_BOOL_KW(location);
           },
-          [](const Tokenizing::MutableKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_MUTABLE_KW();
+          [&location](const Tokenizing::MutableKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_MUTABLE_KW(location);
           },
-          [](const Tokenizing::FuncKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_FUNC_KW();
+          [&location](const Tokenizing::FuncKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_FUNC_KW(location);
           },
-          [](const Tokenizing::ClassKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_CLASS_KW();
+          [&location](const Tokenizing::ClassKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_CLASS_KW(location);
           },
-          [](const Tokenizing::ReturnKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_RETURN_KW();
+          [&location](const Tokenizing::ReturnKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_RETURN_KW(location);
           },
-          [](const Tokenizing::TrueKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_TRUE_KW();
+          [&location](const Tokenizing::TrueKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_TRUE_KW(location);
           },
-          [](const Tokenizing::FalseKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_FALSE_KW();
+          [&location](const Tokenizing::FalseKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_FALSE_KW(location);
           },
-          [](const Tokenizing::PrintKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_PRINT_KW();
+          [&location](const Tokenizing::PrintKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_PRINT_KW(location);
           },
-          [](const Tokenizing::IfKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_IF_KW();
+          [&location](const Tokenizing::IfKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_IF_KW(location);
           },
-          [](const Tokenizing::ElseKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_ELSE_KW();
+          [&location](const Tokenizing::ElseKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_ELSE_KW(location);
           },
-          [](const Tokenizing::Assign&) -> BisonParser::symbol_type {
-            return BisonParser::make_ASSIGN();
+          [&location](const Tokenizing::Assign&) -> BisonParser::symbol_type {
+            return BisonParser::make_ASSIGN(location);
           },
-          [](const Tokenizing::AndAnd&) -> BisonParser::symbol_type {
-            return BisonParser::make_AND_AND();
+          [&location](const Tokenizing::AndAnd&) -> BisonParser::symbol_type {
+            return BisonParser::make_AND_AND(location);
           },
-          [](const Tokenizing::OrOr&) -> BisonParser::symbol_type {
-            return BisonParser::make_OR_OR();
+          [&location](const Tokenizing::OrOr&) -> BisonParser::symbol_type {
+            return BisonParser::make_OR_OR(location);
           },
-          [](const Tokenizing::Not&) -> BisonParser::symbol_type {
-            return BisonParser::make_NOT();
+          [&location](const Tokenizing::Not&) -> BisonParser::symbol_type {
+            return BisonParser::make_NOT(location);
           },
-          [](const Tokenizing::Plus&) -> BisonParser::symbol_type {
-            return BisonParser::make_PLUS();
+          [&location](const Tokenizing::Plus&) -> BisonParser::symbol_type {
+            return BisonParser::make_PLUS(location);
           },
-          [](const Tokenizing::Minus&) -> BisonParser::symbol_type {
-            return BisonParser::make_MINUS();
+          [&location](const Tokenizing::Minus&) -> BisonParser::symbol_type {
+            return BisonParser::make_MINUS(location);
           },
-          [](const Tokenizing::Star&) -> BisonParser::symbol_type {
-            return BisonParser::make_STAR();
+          [&location](const Tokenizing::Star&) -> BisonParser::symbol_type {
+            return BisonParser::make_STAR(location);
           },
-          [](const Tokenizing::Slash&) -> BisonParser::symbol_type {
-            return BisonParser::make_SLASH();
+          [&location](const Tokenizing::Slash&) -> BisonParser::symbol_type {
+            return BisonParser::make_SLASH(location);
           },
-          [](const Tokenizing::Percent&) -> BisonParser::symbol_type {
-            return BisonParser::make_PERCENT();
+          [&location](const Tokenizing::Percent&) -> BisonParser::symbol_type {
+            return BisonParser::make_PERCENT(location);
           },
-          [](const Tokenizing::Semicolon&) -> BisonParser::symbol_type {
-            return BisonParser::make_SEMICOLON();
+          [&location](const Tokenizing::Semicolon&) -> BisonParser::symbol_type {
+            return BisonParser::make_SEMICOLON(location);
           },
-          [](const Tokenizing::Comma&) -> BisonParser::symbol_type {
-            return BisonParser::make_COMMA();
+          [&location](const Tokenizing::Comma&) -> BisonParser::symbol_type {
+            return BisonParser::make_COMMA(location);
           },
-          [](const Tokenizing::Colon&) -> BisonParser::symbol_type {
-            return BisonParser::make_COLON();
+          [&location](const Tokenizing::Colon&) -> BisonParser::symbol_type {
+            return BisonParser::make_COLON(location);
           },
-          [](const Tokenizing::Dot&) -> BisonParser::symbol_type {
-            return BisonParser::make_DOT();
+          [&location](const Tokenizing::Dot&) -> BisonParser::symbol_type {
+            return BisonParser::make_DOT(location);
           },
-          [](const Tokenizing::LeftParen&) -> BisonParser::symbol_type {
-            return BisonParser::make_LEFT_PAREN();
+          [&location](const Tokenizing::LeftParen&) -> BisonParser::symbol_type {
+            return BisonParser::make_LEFT_PAREN(location);
           },
-          [](const Tokenizing::RightParen&) -> BisonParser::symbol_type {
-            return BisonParser::make_RIGHT_PAREN();
+          [&location](const Tokenizing::RightParen&) -> BisonParser::symbol_type {
+            return BisonParser::make_RIGHT_PAREN(location);
           },
-          [](const Tokenizing::LeftBrace&) -> BisonParser::symbol_type {
-            return BisonParser::make_LEFT_BRACE();
+          [&location](const Tokenizing::LeftBrace&) -> BisonParser::symbol_type {
+            return BisonParser::make_LEFT_BRACE(location);
           },
-          [](const Tokenizing::RightBrace&) -> BisonParser::symbol_type {
-            return BisonParser::make_RIGHT_BRACE();
+          [&location](const Tokenizing::RightBrace&) -> BisonParser::symbol_type {
+            return BisonParser::make_RIGHT_BRACE(location);
           },
-          [](const Tokenizing::LeftBracket&) -> BisonParser::symbol_type {
-            return BisonParser::make_LEFT_BRACKET();
+          [&location](const Tokenizing::LeftBracket&) -> BisonParser::symbol_type {
+            return BisonParser::make_LEFT_BRACKET(location);
           },
-          [](const Tokenizing::RightBracket&) -> BisonParser::symbol_type {
-            return BisonParser::make_RIGHT_BRACKET();
+          [&location](const Tokenizing::RightBracket&) -> BisonParser::symbol_type {
+            return BisonParser::make_RIGHT_BRACKET(location);
           },
-          [](const Tokenizing::EqualEqual&) -> BisonParser::symbol_type {
-            return BisonParser::make_EQUAL_EQUAL();
+          [&location](const Tokenizing::EqualEqual&) -> BisonParser::symbol_type {
+            return BisonParser::make_EQUAL_EQUAL(location);
           },
-          [](const Tokenizing::NotEqual&) -> BisonParser::symbol_type {
-            return BisonParser::make_NOT_EQUAL();
+          [&location](const Tokenizing::NotEqual&) -> BisonParser::symbol_type {
+            return BisonParser::make_NOT_EQUAL(location);
           },
-          [](const Tokenizing::Less&) -> BisonParser::symbol_type {
-            return BisonParser::make_LESS();
+          [&location](const Tokenizing::Less&) -> BisonParser::symbol_type {
+            return BisonParser::make_LESS(location);
           },
-          [](const Tokenizing::Greater&) -> BisonParser::symbol_type {
-            return BisonParser::make_GREATER();
+          [&location](const Tokenizing::Greater&) -> BisonParser::symbol_type {
+            return BisonParser::make_GREATER(location);
           },
-          [](const Tokenizing::LessEqual&) -> BisonParser::symbol_type {
-            return BisonParser::make_LESS_EQUAL();
+          [&location](const Tokenizing::LessEqual&) -> BisonParser::symbol_type {
+            return BisonParser::make_LESS_EQUAL(location);
           },
-          [](const Tokenizing::GreaterEqual&) -> BisonParser::symbol_type {
-            return BisonParser::make_GREATER_EQUAL();
+          [&location](const Tokenizing::GreaterEqual&) -> BisonParser::symbol_type {
+            return BisonParser::make_GREATER_EQUAL(location);
           },
-          [](const Tokenizing::Identifier& value) -> BisonParser::symbol_type {
-            return BisonParser::make_IDENT(value.name);
+          [&location](const Tokenizing::Identifier& value) -> BisonParser::symbol_type {
+            return BisonParser::make_IDENT(value.name, location);
           },
-          [](const Tokenizing::Number& value) -> BisonParser::symbol_type {
-            return BisonParser::make_NUM(value.value);
+          [&location](const Tokenizing::Number& value) -> BisonParser::symbol_type {
+            return BisonParser::make_NUM(value.value, location);
           }},
       token);
 }
 
-void BisonParser::error(const std::string& message) {
+void BisonParser::error(
+    const location_type& location,
+    const std::string& message) {
   if (state.errors == nullptr) {
     throw std::runtime_error("Parse error: " + message);
   }
 
+  size_t invalid_token_idx = state.current_index == 0 ? 0 : state.current_index - 1;
+  if (location.has_value) {
+    invalid_token_idx = location.begin_token_idx;
+  }
+
   state.pending_errors.push_back(PendingErrorState{
     "Parse error: " + message,
-    state.current_index == 0 ? 0 : state.current_index - 1
+    invalid_token_idx
   });
 }
 
