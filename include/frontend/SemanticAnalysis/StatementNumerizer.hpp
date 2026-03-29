@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <map>
 #include <optional>
-#include <vector>
 
 #include "Parsing/Ast.hpp"
 

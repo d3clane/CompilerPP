@@ -3,7 +3,6 @@
 #include <gtest/gtest.h>
 
 #include "Parsing/Ast.hpp"
-#include "Parsing/Parser.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "TestParseUtils.hpp"
