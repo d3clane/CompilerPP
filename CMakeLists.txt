@@ -14,31 +14,41 @@ file(MAKE_DIRECTORY "${GENERATED_DIR}")
 
 BISON_TARGET(
   CompilerParser
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Parser.y"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.y"
   "${GENERATED_DIR}/BisonParser.cpp"
   DEFINES_FILE "${GENERATED_DIR}/BisonParser.hpp"
 )
 
 FLEX_TARGET(
   CompilerLexer
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Tokenizing/Lexer.l"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Tokenizing/Lexer.l"
   "${GENERATED_DIR}/FlexLexer.cpp"
 )
 
 add_library(
   compiler_frontend
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Debug/DebugCtx.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Debug/Debug.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Debug/Errors.cpp"
   ${BISON_CompilerParser_OUTPUTS}
   ${FLEX_CompilerLexer_OUTPUTS}
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Parser.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Printer.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/PrinterAST.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/Parsing/Interpreter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Types.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Printer.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Interpreter.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/StatementNumerizer.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/SymbolTable.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/TypeDefiner.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/Resolver.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/AccessAllowanceChecker.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/TypeChecker.cpp"
 )
 
 target_include_directories(
   compiler_frontend
   PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/frontend"
     "${GENERATED_DIR}"
 )
 
@@ -46,7 +56,7 @@ target_compile_features(compiler_frontend PUBLIC cxx_std_20)
 
 add_executable(
   compiler_frontend_cli
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/main.cpp"
 )
 
 target_link_libraries(
@@ -66,6 +76,9 @@ add_executable(
   compiler_frontend_tests
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/ParserTreeTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/InterpreterTests.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/SymbolTableTests.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/ResolverTests.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/TypeCheckerTests.cpp"
 )
 
 target_link_libraries(

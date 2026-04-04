@@ -15,21 +15,36 @@ namespace Tokenizing {
 
 ADD_TOKEN(VarKeyword)
 ADD_TOKEN(IntKeyword)
+ADD_TOKEN(BoolKeyword)
+ADD_TOKEN(MutableKeyword)
+ADD_TOKEN(FuncKeyword)
+ADD_TOKEN(ClassKeyword)
+ADD_TOKEN(ReturnKeyword)
+ADD_TOKEN(TrueKeyword)
+ADD_TOKEN(FalseKeyword)
 ADD_TOKEN(PrintKeyword)
 ADD_TOKEN(IfKeyword)
 ADD_TOKEN(ElseKeyword)
 
 ADD_TOKEN(Assign)
+ADD_TOKEN(AndAnd)
+ADD_TOKEN(OrOr)
+ADD_TOKEN(Not)
 ADD_TOKEN(Plus)
 ADD_TOKEN(Minus)
 ADD_TOKEN(Star)
 ADD_TOKEN(Slash)
 ADD_TOKEN(Percent)
+ADD_TOKEN(Dot)
 ADD_TOKEN(Semicolon)
+ADD_TOKEN(Comma)
+ADD_TOKEN(Colon)
 ADD_TOKEN(LeftParen)
 ADD_TOKEN(RightParen)
 ADD_TOKEN(LeftBrace)
 ADD_TOKEN(RightBrace)
+ADD_TOKEN(LeftBracket)
+ADD_TOKEN(RightBracket)
 
 ADD_TOKEN(EqualEqual)
 ADD_TOKEN(NotEqual)
@@ -53,20 +68,35 @@ struct Number {
 using TokenVariant = std::variant<
     VarKeyword,
     IntKeyword,
+    BoolKeyword,
+    MutableKeyword,
+    FuncKeyword,
+    ClassKeyword,
+    ReturnKeyword,
+    TrueKeyword,
+    FalseKeyword,
     PrintKeyword,
     IfKeyword,
     ElseKeyword,
     Assign,
+    AndAnd,
+    OrOr,
+    Not,
     Plus,
     Minus,
     Star,
     Slash,
     Percent,
+    Dot,
     Semicolon,
+    Comma,
+    Colon,
     LeftParen,
     RightParen,
     LeftBrace,
     RightBrace,
+    LeftBracket,
+    RightBracket,
     EqualEqual,
     NotEqual,
     Less,

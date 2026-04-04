@@ -1,0 +1,85 @@
+class User {
+    var age int = 18;
+    var isMale bool = true;
+
+    func Init(age_ int, isMale_ bool) {
+        age = age_;
+        isMale = isMale_;
+    }
+
+    func GetAge() int {
+        return age;
+    }
+
+    func GetIsMale() bool {
+        return isMale;
+    }
+
+    func increaseAge() int {
+        age = age + 1;
+        return age;
+    }
+
+    func ping() int {
+        return pong();
+    }
+
+    func pong() int {
+        return ping();
+    }
+
+    func isEqual(other User) bool {
+        return age == other.age && 
+               isMale == other.isMale;
+    }
+}
+
+class RootUser : User {
+    var hasIncreasedAge bool;
+
+    func increaseAge() {
+        age = age + 2;
+        hasIncreasedAge = true;
+    }
+}
+
+func factorial(n int) int {
+    if n <= 0 {
+        return 1;
+    }
+
+    return factorial(n - 1) * n;
+}
+
+func fib(n int) int {
+    if n == 0 {
+        return 0;
+    } else if n == 1 {
+        return 1;
+    }
+
+
+    return fib(n - 1) + fib(n - 2);
+}
+
+func PrintUserAge(user User) {
+    print(user.GetAge());
+}
+
+var GlobalN int = 10;
+
+func main() {
+    if GlobalN % 3 == 1 {
+        print(GlobalN - 2);
+        var GlobalN int = 17;
+        print(GlobalN);
+    }
+    print(GlobalN);
+    GlobalN = GlobalN + 10;
+    print(GlobalN);
+
+    var user RootUser;
+    user.Init(21, false);
+
+    PrintUserAge(user);
+}
