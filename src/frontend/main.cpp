@@ -1,11 +1,13 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "Debug/DebugCtx.hpp"
+#include "Lowering/LLVMIRLowering.hpp"
 #include "Parsing/Parser.hpp"
 #include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
@@ -14,7 +16,6 @@
 #include "SemanticAnalysis/TypeChecker.hpp"
 #include "SemanticAnalysis/TypeDefiner.hpp"
 #include "Tokenizing/Lexer.hpp"
-#include "Visitors/Interpreter.hpp"
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
@@ -33,22 +34,23 @@ int main(int argc, char* argv[]) {
       std::istreambuf_iterator<char>(input_stream),
       std::istreambuf_iterator<char>()};
 
+  std::optional<Parsing::DebugCtx> debug_ctx;
   try {
-    Parsing::DebugCtx debug_ctx(input_path);
-    debug_ctx.SetInputCode(source);
-    debug_ctx.GetErrors().SetLimit(20);
+    debug_ctx.emplace(input_path);
+    debug_ctx->SetInputCode(source);
+    debug_ctx->GetErrors().SetLimit(20);
 
     std::vector<Parsing::DebugInfo> token_debug_infos;
     const std::vector<Tokenizing::TokenVariant> tokens =
         Tokenizing::Tokenize(
             source,
             input_path,
-            &debug_ctx.GetErrors(),
+            &debug_ctx->GetErrors(),
             &token_debug_infos);
 
     const Parsing::Program program = Parsing::ParseTokens(
         tokens,
-        debug_ctx,
+        *debug_ctx,
         &token_debug_infos,
         source.size());
 
@@ -59,28 +61,41 @@ int main(int argc, char* argv[]) {
     Parsing::SymbolTable symbol_table =
         Parsing::BuildSymbolTable(
             program,
-            type_definer,
             std::move(numerizer),
-            debug_ctx);
+            *debug_ctx);
     const Parsing::UseResolver use_resolver =
-        Parsing::BuildUseResolver(program, symbol_table, debug_ctx);
+        Parsing::BuildUseResolver(program, symbol_table, *debug_ctx);
     Parsing::CheckAccessAllowance(
         program,
         use_resolver,
         type_definer,
-        debug_ctx);
+        *debug_ctx);
     Parsing::CheckTypes(
         program,
         use_resolver,
         type_definer,
-        debug_ctx);
+        *debug_ctx);
 
-    if (debug_ctx.GetErrors().HasErrors()) {
-      debug_ctx.GetErrors().ThrowErrors();
+    if (debug_ctx->GetErrors().HasErrors()) {
+      debug_ctx->GetErrors().ThrowErrors();
     }
 
-    Parsing::Interpret(program, std::cout);
+    const std::string llvm_ir = Parsing::LowerToLLVMIR(
+        program,
+        use_resolver,
+        type_definer);
+    std::cout << llvm_ir;
   } catch (const std::exception& error) {
+    if (debug_ctx.has_value() && debug_ctx->GetErrors().HasErrors()) {
+      try {
+        debug_ctx->GetErrors().ThrowErrors();
+      } catch (const std::exception& debug_error) {
+        if (std::string(debug_error.what()) != error.what()) {
+          std::cerr << "Error: " << debug_error.what() << "\n";
+        }
+      }
+    }
+
     std::cerr << "Error: " << error.what() << "\n";
     return 1;
   }

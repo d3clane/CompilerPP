@@ -1,0 +1,109 @@
+class Node {
+    var value int;
+    var hasLeft bool;
+    var hasRight bool;
+    var left Node;
+    var right Node;
+
+    func Init(value_ int) {
+        value = value_;
+        hasLeft = false;
+        hasRight = false;
+    }
+
+    func SetLeft(left_ Node) {
+        left = left_;
+        hasLeft = true;
+    }
+
+    func SetRight(right_ Node) {
+        right = right_;
+        hasRight = true;
+    }
+
+    func SetChildren(left_ Node, right_ Node) {
+        left = left_;
+        right = right_;
+        hasLeft = true;
+        hasRight = true;
+    }
+
+    func multiply(x int) {
+        value = value * x;
+
+        if hasLeft {
+            left.multiply(x);
+        }
+
+        if hasRight {
+            right.multiply(x);
+        }
+    }
+
+    func sum() int {
+        var total int = value;
+
+        if hasLeft {
+            total = total + left.sum();
+        }
+
+        if hasRight {
+            total = total + right.sum();
+        }
+
+        return total;
+    }
+
+    func printPreorder() {
+        print(value);
+
+        if hasLeft {
+            left.printPreorder();
+        }
+
+        if hasRight {
+            right.printPreorder();
+        }
+    }
+}
+
+func main() {
+    var root Node;
+    root.Init(10);
+
+    var left Node;
+    left.Init(4);
+
+    var right Node;
+    right.Init(7);
+
+    var leftLeft Node;
+    leftLeft.Init(1);
+
+    var leftRight Node;
+    leftRight.Init(2);
+
+    var rightLeft Node;
+    rightLeft.Init(3);
+
+    var rightRight Node;
+    rightRight.Init(5);
+
+    left.SetChildren(leftLeft, leftRight);
+    right.SetChildren(rightLeft, rightRight);
+    root.SetChildren(left, right);
+
+    print(111);
+    root.printPreorder();
+
+    print(222);
+    print(root.sum());
+
+    root.multiply(10);
+
+    print(333);
+    root.printPreorder();
+
+    print(444);
+    print(root.sum());
+}

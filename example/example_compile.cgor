@@ -15,8 +15,12 @@ class User {
         return isMale;
     }
 
+    func IncreaseAgeBy(delta int) {
+        age = age + delta;
+    }
+
     func increaseAge() int {
-        age = age + 1;
+        IncreaseAgeBy(1);
         return age;
     }
 
@@ -29,7 +33,7 @@ class User {
     }
 
     func isEqual(other User) bool {
-        return age == other.age && 
+        return age == other.age &&
                isMale == other.isMale;
     }
 }
@@ -37,9 +41,10 @@ class User {
 class RootUser : User {
     var hasIncreasedAge bool;
 
-    func increaseAge() {
-        age = age + 2;
+    func increaseAge() int {
+        IncreaseAgeBy(2);
         hasIncreasedAge = true;
+        return GetAge();
     }
 }
 
@@ -57,7 +62,6 @@ func fib(n int) int {
     } else if n == 1 {
         return 1;
     }
-
 
     return fib(n - 1) + fib(n - 2);
 }
