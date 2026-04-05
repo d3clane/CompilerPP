@@ -1,15 +1,12 @@
 #include "SemanticAnalysis/SymbolTable.hpp"
 
-#include <algorithm>
 #include <cassert>
 #include <optional>
-#include <set>
 #include <stdexcept>
 #include <utility>
 #include <variant>
 
 #include "Debug/DebugCtx.hpp"
-#include "SemanticAnalysis/TypeDefiner.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -97,146 +94,12 @@ const StatementNumerizer* SymbolTable::GetStatementNumerizer() const {
 
 namespace {
 
-class ClassSymbolTableInitter {
- public:
-  ClassSymbolTableInitter(
-      const ClassDeclarationStatement& class_declaration,
-      const TypeDefiner& type_definer,
-      const StatementNumerizer& numerizer,
-      DebugCtx& debug_ctx,
-      LocalSymbolTable& class_scope)
-      : class_declaration_(class_declaration),
-        type_definer_(type_definer),
-        numerizer_(numerizer),
-        debug_ctx_(debug_ctx),
-        class_scope_(class_scope) {}
-
-  void Init() {
-    const std::optional<std::vector<const ClassDeclarationStatement*>> base_chain =
-        BuildBaseClassChain();
-    if (!base_chain.has_value()) {
-      return;
-    }
-
-    for (size_t i = 0; i < base_chain->size(); ++i) {
-      const ClassDeclarationStatement* base_class = (*base_chain)[i];
-      assert(base_class != nullptr);
-
-      for (size_t field_i = 0; field_i < base_class->fields.size(); ++field_i) {
-        AddInheritedField(base_class->fields[field_i]);
-      }
-
-      for (size_t method_i = 0; method_i < base_class->methods.size(); ++method_i) {
-        AddInheritedMethod(base_class->methods[method_i]);
-      }
-    }
-  }
-
- private:
-  using ScopedStmtRef = StatementNumerizer::ScopedStmtRef;
-
-  ScopedStmtRef GetNodeRefOrThrow(const ASTNode* node) const {
-    const std::optional<ScopedStmtRef> ref = numerizer_.GetRef(node);
-    if (!ref.has_value()) {
-      throw std::runtime_error("statement numerizer is incorrect for this program");
-    }
-
-    return *ref;
-  }
-
-  SymbolData BuildFieldSymbolData(const DeclarationStatement& field) const {
-    return SymbolData{
-        field.type,
-        field.variable_name,
-        field.is_mutable,
-        SymbolDebugInfo{"variable declaration"},
-        &field,
-        GetNodeRefOrThrow(&field),
-        SymbolKind::Variable};
-  }
-
-  SymbolData BuildMethodSymbolData(const FunctionDeclarationStatement& method) const {
-    return SymbolData{
-        Type{BuildFunctionType(method)},
-        method.function_name,
-        false,
-        SymbolDebugInfo{"function declaration"},
-        &method,
-        GetNodeRefOrThrow(&method),
-        SymbolKind::Function};
-  }
-
-  void AddInheritedField(const DeclarationStatement& field) {
-    const LocalSymbolTable::ErrorMsg error_msg =
-        class_scope_.AddSymbolInfo(BuildFieldSymbolData(field));
-    if (!error_msg.empty()) {
-      debug_ctx_.GetErrors().AddError(&field, error_msg);
-    }
-  }
-
-  void AddInheritedMethod(const FunctionDeclarationStatement& method) {
-    const SymbolData* existing_symbol =
-        class_scope_.GetSymbolInfoInLocalScope(method.function_name);
-    if (existing_symbol != nullptr) {
-      if (existing_symbol->kind == SymbolKind::Function) {
-        return;
-      }
-
-      debug_ctx_.GetErrors().AddError(
-          &method,
-          "Duplicate inherited member in class scope: " + method.function_name);
-      return;
-    }
-
-    const LocalSymbolTable::ErrorMsg error_msg =
-        class_scope_.AddSymbolInfo(BuildMethodSymbolData(method));
-    if (!error_msg.empty()) {
-      debug_ctx_.GetErrors().AddError(&method, error_msg);
-    }
-  }
-
-  std::optional<std::vector<const ClassDeclarationStatement*>> BuildBaseClassChain() const {
-    std::set<std::string> visited_classes{class_declaration_.class_name};
-    std::vector<const ClassDeclarationStatement*> chain;
-
-    const ClassDeclarationStatement* current_class = &class_declaration_;
-    while (current_class->base_class_name.has_value()) {
-      const ClassDeclarationStatement* base_class =
-          type_definer_.GetClassDeclaration(*current_class->base_class_name);
-      if (base_class == nullptr) {
-        return chain;
-      }
-
-      if (!visited_classes.insert(base_class->class_name).second) {
-        debug_ctx_.GetErrors().AddError(
-            &class_declaration_,
-            "Cyclic class inheritance detected");
-        return std::nullopt;
-      }
-
-      chain.push_back(base_class);
-      current_class = base_class;
-    }
-
-    std::reverse(chain.begin(), chain.end());
-    return chain;
-  }
-
-  const ClassDeclarationStatement& class_declaration_;
-  const TypeDefiner& type_definer_;
-  const StatementNumerizer& numerizer_;
-  DebugCtx& debug_ctx_;
-  LocalSymbolTable& class_scope_;
-};
-
 class SymbolTableBuilder {
  public:
   SymbolTableBuilder(
-      const TypeDefiner& type_definer,
       const StatementNumerizer& numerizer,
       DebugCtx& debug_ctx)
-      : type_definer_(type_definer),
-        numerizer_(numerizer),
+      : numerizer_(numerizer),
         debug_ctx_(debug_ctx) {}
 
   SymbolTable Build(const Program& program) {
@@ -394,61 +257,16 @@ class SymbolTableBuilder {
   void VisitClassDeclarationStatement(
       const ClassDeclarationStatement& class_declaration) {
     EnterScope(&class_declaration);
-    ClassSymbolTableInitter class_table_initter(
-        class_declaration,
-        type_definer_,
-        numerizer_,
-        debug_ctx_,
-        CurrentScope());
-    class_table_initter.Init();
 
     for (size_t i = 0; i < class_declaration.fields.size(); ++i) {
       VisitDeclarationStatement(class_declaration.fields[i]);
     }
 
     for (size_t i = 0; i < class_declaration.methods.size(); ++i) {
-      VisitClassMethodDeclaration(class_declaration.methods[i], class_declaration);
+      VisitFunctionDeclarationStatement(class_declaration.methods[i]);
     }
 
     LeaveScope();
-  }
-
-  bool IsMethodDeclaredInClass(
-      const ASTNode* declaration_node,
-      const ClassDeclarationStatement& class_declaration) const {
-    for (size_t i = 0; i < class_declaration.methods.size(); ++i) {
-      if (&class_declaration.methods[i] == declaration_node) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  void VisitClassMethodDeclaration(
-      const FunctionDeclarationStatement& method_declaration,
-      const ClassDeclarationStatement& owner_class) {
-    auto& declared_method_names = declared_method_names_by_class_[&owner_class];
-    if (!declared_method_names.insert(method_declaration.function_name).second) {
-      debug_ctx_.GetErrors().AddError(
-          &method_declaration,
-          "Duplicate declaration in the same scope: " + method_declaration.function_name);
-      RegisterNode(&method_declaration);
-      VisitFunctionBody(method_declaration);
-      return;
-    }
-
-    const SymbolData* existing_symbol =
-        CurrentScope().GetSymbolInfoInLocalScope(method_declaration.function_name);
-    if (existing_symbol != nullptr &&
-        existing_symbol->kind == SymbolKind::Function &&
-        !IsMethodDeclaredInClass(existing_symbol->declaration_node, owner_class)) {
-      RegisterNode(&method_declaration);
-      VisitFunctionBody(method_declaration);
-      return;
-    }
-
-    VisitFunctionDeclarationStatement(method_declaration);
   }
 
   void VisitAssignmentStatement(const AssignmentStatement& assignment) {
@@ -562,22 +380,19 @@ class SymbolTableBuilder {
     VisitExpression(*binary_expression.right);
   }
 
-  const TypeDefiner& type_definer_;
   const StatementNumerizer& numerizer_;
   SymbolTable symbol_table_;
   DebugCtx& debug_ctx_;
   std::vector<LocalSymbolTable*> scope_stack_;
-  std::map<const ClassDeclarationStatement*, std::set<std::string>> declared_method_names_by_class_;
 };
 
 }  // namespace
 
 SymbolTable BuildSymbolTable(
     const Program& program,
-    const TypeDefiner& type_definer,
     StatementNumerizer numerizer,
     DebugCtx& debug_ctx) {
-  SymbolTableBuilder builder(type_definer, numerizer, debug_ctx);
+  SymbolTableBuilder builder(numerizer, debug_ctx);
   SymbolTable symbol_table = builder.Build(program);
   symbol_table.SetStatementNumerizer(std::move(numerizer));
   return symbol_table;
@@ -585,12 +400,10 @@ SymbolTable BuildSymbolTable(
 
 SymbolTable BuildSymbolTable(
     const Program& program,
-    const TypeDefiner& type_definer,
     StatementNumerizer numerizer) {
   DebugCtx debug_ctx;
   SymbolTable symbol_table = BuildSymbolTable(
       program,
-      type_definer,
       std::move(numerizer),
       debug_ctx);
   if (debug_ctx.GetErrors().HasErrors()) {
@@ -600,44 +413,9 @@ SymbolTable BuildSymbolTable(
   return symbol_table;
 }
 
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    const TypeDefiner& type_definer,
-    DebugCtx& debug_ctx) {
-  StatementNumerizer numerizer = BuildStatementNumerizer(program);
-  return BuildSymbolTable(program, type_definer, std::move(numerizer), debug_ctx);
-}
-
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    const TypeDefiner& type_definer) {
-  DebugCtx debug_ctx;
-  SymbolTable symbol_table = BuildSymbolTable(program, type_definer, debug_ctx);
-  if (debug_ctx.GetErrors().HasErrors()) {
-    debug_ctx.GetErrors().ThrowErrors();
-  }
-
-  return symbol_table;
-}
-
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    StatementNumerizer numerizer) {
-  const TypeDefiner type_definer = BuildTypeDefiner(program);
-  return BuildSymbolTable(program, type_definer, std::move(numerizer));
-}
-
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    StatementNumerizer numerizer,
-    DebugCtx& debug_ctx) {
-  const TypeDefiner type_definer = BuildTypeDefiner(program);
-  return BuildSymbolTable(program, type_definer, std::move(numerizer), debug_ctx);
-}
-
 SymbolTable BuildSymbolTable(const Program& program, DebugCtx& debug_ctx) {
-  const TypeDefiner type_definer = BuildTypeDefiner(program);
-  return BuildSymbolTable(program, type_definer, debug_ctx);
+  StatementNumerizer numerizer = BuildStatementNumerizer(program);
+  return BuildSymbolTable(program, std::move(numerizer), debug_ctx);
 }
 
 SymbolTable BuildSymbolTable(const Program& program) {

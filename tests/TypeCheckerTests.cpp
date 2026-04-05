@@ -216,12 +216,20 @@ TEST(TypeCheckerTests, AcceptsFieldAccessForSameClassInsideMethod) {
   ExpectTypeCheckPass(source);
 }
 
-TEST(TypeCheckerTests, AcceptsBaseFieldAccessInsideDerivedMethod) {
+TEST(TypeCheckerTests, RejectsBaseFieldAccessInsideDerivedMethod) {
   const std::string source =
       "class Base { var x int; }\n"
       "class Derived:Base { func f(base Base) int { return x + base.x; } }\n";
 
-  ExpectTypeCheckPass(source);
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, RejectsInheritedFieldAccessForDerivedReceiverType) {
+  const std::string source =
+      "class Base { var value int; }\n"
+      "class Derived:Base { func bad(other Derived) int { return other.value; } }\n";
+
+  ExpectTypeCheckFail(source);
 }
 
 TEST(TypeCheckerTests, RejectsFieldAccessOutsideMethod) {

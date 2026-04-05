@@ -544,27 +544,69 @@ TEST(ResolverTests, ResolvesBaseMethodCallInsideDerivedMethod) {
       &base_class->methods[0]);
 }
 
-TEST(ResolverTests, ResolvesBaseFieldUseInsideDerivedMethod) {
+TEST(ResolverTests, ResolvesBaseMethodCallForDerivedReceiverClass) {
   const std::string source =
-      "class Base { var x int; }\n"
-      "class Derived:Base { func get() int { return x; } }\n";
+      "class Base { func ping() int { return 1; } }\n"
+      "class Derived:Base { }\n"
+      "var obj Derived;\n"
+      "func main() { obj.ping(); }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   const Parsing::UseResolver resolver =
       Parsing::BuildUseResolver(program, symbol_table);
 
-  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_EQ(program.top_statements.size(), 4u);
   ASSERT_NE(program.top_statements[0], nullptr);
-  ASSERT_NE(program.top_statements[1], nullptr);
+  ASSERT_NE(program.top_statements[3], nullptr);
 
   const auto* base_class =
       std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(base_class, nullptr);
-  ASSERT_EQ(base_class->fields.size(), 1u);
+  ASSERT_EQ(base_class->methods.size(), 1u);
+
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[3]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
+  const auto* expression_statement =
+      std::get_if<Parsing::Expression>(&main_function->body->statements[0]->value);
+  ASSERT_NE(expression_statement, nullptr);
+
+  const auto* method_call =
+      std::get_if<Parsing::MethodCall>(&expression_statement->value);
+  ASSERT_NE(method_call, nullptr);
+
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("ping", &method_call->function_call),
+      &base_class->methods[0]);
+}
+
+TEST(ResolverTests, ResolvesBaseMethodBeforeGlobalFunctionInsideDerivedMethod) {
+  const std::string source =
+      "var ping int = 0;\n"
+      "class Base { func ping() int { return 1; } }\n"
+      "class Derived:Base { func use_base() int { return ping(); } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+
+  ASSERT_EQ(program.top_statements.size(), 3u);
+  ASSERT_NE(program.top_statements[1], nullptr);
+  ASSERT_NE(program.top_statements[2], nullptr);
+
+  const auto* base_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(base_class, nullptr);
+  ASSERT_EQ(base_class->methods.size(), 1u);
 
   const auto* derived_class =
-      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[2]->value);
   ASSERT_NE(derived_class, nullptr);
   ASSERT_EQ(derived_class->methods.size(), 1u);
   ASSERT_NE(derived_class->methods[0].body, nullptr);
@@ -576,13 +618,37 @@ TEST(ResolverTests, ResolvesBaseFieldUseInsideDerivedMethod) {
   ASSERT_NE(return_statement, nullptr);
   ASSERT_NE(return_statement->expr, nullptr);
 
-  const auto* identifier =
-      std::get_if<Parsing::IdentifierExpression>(&return_statement->expr->value);
-  ASSERT_NE(identifier, nullptr);
+  const auto* function_call =
+      std::get_if<Parsing::FunctionCall>(&return_statement->expr->value);
+  ASSERT_NE(function_call, nullptr);
 
   EXPECT_EQ(
-      resolver.GetUsedVarDef("x", identifier),
-      &base_class->fields[0]);
+      resolver.GetUsedVarDef("ping", function_call),
+      &base_class->methods[0]);
+}
+
+TEST(ResolverTests, ThrowsOnBaseFieldUseInsideDerivedMethod) {
+  const std::string source =
+      "class Base { var x int; }\n"
+      "class Derived:Base { func get() int { return x; } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  EXPECT_THROW(
+      Parsing::BuildUseResolver(program, symbol_table),
+      std::runtime_error);
+}
+
+TEST(ResolverTests, ThrowsOnInheritedFieldAccessForDerivedReceiverClass) {
+  const std::string source =
+      "class Base { var value int; }\n"
+      "class Derived:Base { func get(other Derived) int { return other.value; } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  EXPECT_THROW(
+      Parsing::BuildUseResolver(program, symbol_table),
+      std::runtime_error);
 }
 
 TEST(ResolverTests, ResolvesOverriddenMethodCallFromSiblingMethod) {

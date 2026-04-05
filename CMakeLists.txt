@@ -34,6 +34,7 @@ add_library(
   ${FLEX_CompilerLexer_OUTPUTS}
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Types.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Utils/ClassMemberLookup.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Printer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Interpreter.cpp"

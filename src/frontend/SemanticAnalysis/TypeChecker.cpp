@@ -369,10 +369,18 @@ class TypeCheckerVisitor {
   void VisitClassDeclarationStatement(
       const ClassDeclarationStatement& class_declaration) {
     if (class_declaration.base_class_name.has_value()) {
-      if (type_definer_.GetClassDeclaration(*class_declaration.base_class_name) == nullptr) {
+      const ClassDeclarationStatement* base_class =
+          type_definer_.GetClassDeclaration(*class_declaration.base_class_name);
+      if (base_class == nullptr) {
         ReportCodeError(
             &class_declaration,
             "Unknown base class: " + *class_declaration.base_class_name);
+      } else if (IsDerivedClassOf(
+                     base_class->class_name,
+                     class_declaration.class_name)) {
+        ReportCodeError(
+            &class_declaration,
+            "Cyclic class inheritance detected");
       }
     }
 

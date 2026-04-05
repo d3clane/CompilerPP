@@ -12,7 +12,6 @@
 namespace Parsing {
 
 class DebugCtx;
-class TypeDefiner;
 
 struct SymbolDebugInfo {
   std::string context;
@@ -79,22 +78,6 @@ class SymbolTable {
   std::unique_ptr<StatementNumerizer> statement_numerizer_;
 };
 
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    const TypeDefiner& type_definer,
-    StatementNumerizer numerizer,
-    DebugCtx& debug_ctx);
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    const TypeDefiner& type_definer,
-    StatementNumerizer numerizer);
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    const TypeDefiner& type_definer,
-    DebugCtx& debug_ctx);
-SymbolTable BuildSymbolTable(
-    const Program& program,
-    const TypeDefiner& type_definer);
 SymbolTable BuildSymbolTable(
     const Program& program,
     StatementNumerizer numerizer,

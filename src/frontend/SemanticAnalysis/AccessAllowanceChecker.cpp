@@ -1,8 +1,6 @@
 #include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 
 #include <cassert>
-#include <map>
-#include <set>
 #include <stdexcept>
 #include <variant>
 
@@ -18,14 +16,11 @@ class AccessAllowanceCheckerVisitor {
   AccessAllowanceCheckerVisitor(
       const Program& program,
       const UseResolver& use_resolver,
-      const TypeDefiner& type_definer,
+      const TypeDefiner&,
       DebugCtx& debug_ctx)
       : program_(program),
         use_resolver_(use_resolver),
-        type_definer_(type_definer),
-        debug_ctx_(debug_ctx) {
-    IndexFieldOwners();
-  }
+        debug_ctx_(debug_ctx) {}
 
   void Check() {
     VisitStatements(program_.top_statements);
@@ -34,20 +29,6 @@ class AccessAllowanceCheckerVisitor {
  private:
   void ReportCodeError(const ASTNode* node, const std::string& message) {
     debug_ctx_.GetErrors().AddError(node, message);
-  }
-
-  void IndexFieldOwners() {
-    for (const auto& [_, class_declaration] :
-         type_definer_.GetClassDeclarations()) {
-      if (class_declaration == nullptr) {
-        continue;
-      }
-
-      for (size_t i = 0; i < class_declaration->fields.size(); ++i) {
-        field_owner_by_field_node_[&class_declaration->fields[i]] =
-            class_declaration;
-      }
-    }
   }
 
   const UseResolver::ResolvedSymbol& ResolveFieldSymbolOrThrow(
@@ -67,55 +48,14 @@ class AccessAllowanceCheckerVisitor {
     return *resolved_symbol;
   }
 
-  const ClassDeclarationStatement* GetFieldOwnerClassOrThrow(
-      const ASTNode* field_node) const {
-    const auto field_owner_it = field_owner_by_field_node_.find(field_node);
-    if (field_owner_it == field_owner_by_field_node_.end()) {
-      throw std::runtime_error("resolver is incorrect for this program");
-    }
-
-    return field_owner_it->second;
-  }
-
-  bool IsSameOrDerivedClass(
-      const ClassDeclarationStatement& derived_class,
-      const ClassDeclarationStatement& base_class) const {
-    if (derived_class.class_name == base_class.class_name) {
-      return true;
-    }
-
-    std::set<std::string> visited_classes;
-    const ClassDeclarationStatement* current_class = &derived_class;
-    while (current_class != nullptr) {
-      if (!visited_classes.insert(current_class->class_name).second) {
-        return false;
-      }
-
-      if (!current_class->base_class_name.has_value()) {
-        return false;
-      }
-
-      const ClassDeclarationStatement* parent_class =
-          type_definer_.GetClassDeclaration(*current_class->base_class_name);
-      if (parent_class == nullptr) {
-        return false;
-      }
-
-      if (parent_class->class_name == base_class.class_name) {
-        return true;
-      }
-
-      current_class = parent_class;
-    }
-
-    return false;
-  }
-
   void CheckFieldAccess(const FieldAccess& field_access) {
     const UseResolver::ResolvedSymbol& resolved_field =
         ResolveFieldSymbolOrThrow(field_access);
     const ClassDeclarationStatement* field_owner_class =
-        GetFieldOwnerClassOrThrow(resolved_field.definition_node);
+        resolved_field.declaring_class;
+    if (field_owner_class == nullptr) {
+      throw std::runtime_error("resolver is incorrect for this program");
+    }
 
     if (current_method_owner_class_ == nullptr) {
       ReportCodeError(
@@ -124,10 +64,10 @@ class AccessAllowanceCheckerVisitor {
       return;
     }
 
-    if (!IsSameOrDerivedClass(*current_method_owner_class_, *field_owner_class)) {
+    if (current_method_owner_class_ != field_owner_class) {
       ReportCodeError(
           &field_access,
-          "Field access is allowed only for current class or its base classes");
+          "Field access is allowed only for current class");
     }
   }
 
@@ -279,9 +219,7 @@ class AccessAllowanceCheckerVisitor {
 
   const Program& program_;
   const UseResolver& use_resolver_;
-  const TypeDefiner& type_definer_;
   DebugCtx& debug_ctx_;
-  std::map<const ASTNode*, const ClassDeclarationStatement*> field_owner_by_field_node_;
   const ClassDeclarationStatement* current_method_owner_class_ = nullptr;
 };
 
