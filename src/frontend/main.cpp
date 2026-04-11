@@ -8,8 +8,8 @@
 #include <vector>
 
 #include "Debug/DebugCtx.hpp"
+#include "Lowering/ExecutableLowering.hpp"
 #include "Lowering/LLVMIRLowering.hpp"
-#include "Lowering/ObjectFileLowering.hpp"
 #include "Parsing/Parser.hpp"
 #include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
@@ -21,7 +21,7 @@
 
 int main(int argc, char* argv[]) {
   if (argc < 2 || argc > 3) {
-    std::cerr << "Usage: " << argv[0] << " <input-file> [output-object-file]\n";
+    std::cerr << "Usage: " << argv[0] << " <input-file> [output-executable]\n";
     return 1;
   }
 
@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
     output_path = argv[2];
   } else {
     output_path = input_path;
-    output_path.replace_extension(".o");
+    output_path.replace_extension();
   }
 
   std::ifstream input_stream(input_path);
@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
         program,
         use_resolver,
         type_definer);
-    Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+    Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
   } catch (const std::exception& error) {
     if (debug_ctx.has_value() && debug_ctx->GetErrors().HasErrors()) {
       try {

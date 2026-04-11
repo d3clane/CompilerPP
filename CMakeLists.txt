@@ -52,6 +52,7 @@ add_library(
   ${FLEX_CompilerLexer_OUTPUTS}
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Types.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/ExecutableLowering.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMConstructUtils.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMIRLowering.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/ObjectFileLowering.cpp"

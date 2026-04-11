@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "Lowering/ExecutableLowering.hpp"
 #include "Lowering/LLVMIRLowering.hpp"
 #include "Lowering/ObjectFileLowering.hpp"
 #include "SemanticAnalysis/AccessAllowanceChecker.hpp"
@@ -39,6 +40,21 @@ void LowerSourceToObjectFile(
   Parsing::LLVMIRModule llvm_ir =
       Parsing::LowerToLLVMIRModule(program, resolver, type_definer);
   Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+}
+
+void LowerSourceToExecutableFile(
+    const std::string& source,
+    const std::filesystem::path& output_path) {
+  const Parsing::Program program = Parsing::ParseSource(source);
+  const Parsing::TypeDefiner type_definer = Parsing::BuildTypeDefiner(program);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+  Parsing::CheckAccessAllowance(program, resolver, type_definer);
+  Parsing::CheckTypes(program, resolver, type_definer);
+  Parsing::LLVMIRModule llvm_ir =
+      Parsing::LowerToLLVMIRModule(program, resolver, type_definer);
+  Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
 }
 
 TEST(LoweringTests, LowersDerivedLayoutWithEmbeddedBaseAndAllocator) {
@@ -197,6 +213,20 @@ TEST(LoweringTests, EmitsNativeObjectFile) {
   std::filesystem::remove(output_path);
 
   LowerSourceToObjectFile(source, output_path);
+
+  ASSERT_TRUE(std::filesystem::exists(output_path));
+  EXPECT_GT(std::filesystem::file_size(output_path), 0u);
+  std::filesystem::remove(output_path);
+}
+
+TEST(LoweringTests, EmitsNativeExecutableFile) {
+  const std::string source =
+      "func main() int { return 0; }\n";
+  const std::filesystem::path output_path =
+      std::filesystem::temp_directory_path() / "compilerpp_lowering_test";
+  std::filesystem::remove(output_path);
+
+  LowerSourceToExecutableFile(source, output_path);
 
   ASSERT_TRUE(std::filesystem::exists(output_path));
   EXPECT_GT(std::filesystem::file_size(output_path), 0u);

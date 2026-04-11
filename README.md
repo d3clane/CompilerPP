@@ -17,9 +17,9 @@ cmake --build build/
 ctest --test-dir build --output-on-failure   
 ```
 
-Также есть cli для компиляции входного файла в объектный файл:
+Также есть cli для компиляции входного файла в исполняемый файл:
 ```
-./build/compiler_frontend_cli <input_file> [output.o]
+./build/compiler_frontend_cli <input_file> [output_executable]
 ```
 
 Пример кода в нынешней версии грамматики можно найти в [файле](example.cgor).
