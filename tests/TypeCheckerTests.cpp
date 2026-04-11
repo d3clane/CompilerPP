@@ -168,6 +168,29 @@ TEST(TypeCheckerTests, AcceptsClassAndArrayTypes) {
   ExpectTypeCheckPass(source);
 }
 
+TEST(TypeCheckerTests, AcceptsDeletingClassVariable) {
+  const std::string source =
+      "class Node { var value int; }\n"
+      "func main() { var node Node; delete node; }\n";
+
+  ExpectTypeCheckPass(source);
+}
+
+TEST(TypeCheckerTests, RejectsDeletingNonClassVariable) {
+  const std::string source =
+      "func main() { var x int; delete x; }\n";
+
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, RejectsDeletingFunctionName) {
+  const std::string source =
+      "func foo() { }\n"
+      "func main() { delete foo; }\n";
+
+  ExpectTypeCheckFail(source);
+}
+
 TEST(TypeCheckerTests, RejectsUnknownClassTypeInDeclaration) {
   const std::string source = "var x Unknown;\n";
 
@@ -216,12 +239,20 @@ TEST(TypeCheckerTests, AcceptsFieldAccessForSameClassInsideMethod) {
   ExpectTypeCheckPass(source);
 }
 
-TEST(TypeCheckerTests, AcceptsBaseFieldAccessInsideDerivedMethod) {
+TEST(TypeCheckerTests, RejectsBaseFieldAccessInsideDerivedMethod) {
   const std::string source =
       "class Base { var x int; }\n"
       "class Derived:Base { func f(base Base) int { return x + base.x; } }\n";
 
-  ExpectTypeCheckPass(source);
+  ExpectTypeCheckFail(source);
+}
+
+TEST(TypeCheckerTests, RejectsInheritedFieldAccessForDerivedReceiverType) {
+  const std::string source =
+      "class Base { var value int; }\n"
+      "class Derived:Base { func bad(other Derived) int { return other.value; } }\n";
+
+  ExpectTypeCheckFail(source);
 }
 
 TEST(TypeCheckerTests, RejectsFieldAccessOutsideMethod) {

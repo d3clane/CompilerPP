@@ -2,7 +2,6 @@
 
 #include <cassert>
 #include <optional>
-#include <set>
 #include <stdexcept>
 #include <string>
 #include <variant>
@@ -10,6 +9,7 @@
 #include "Debug/DebugCtx.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "SemanticAnalysis/TypeDefiner.hpp"
+#include "Utils/ClassMemberLookup.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -18,6 +18,11 @@ namespace {
 
 class UseResolverBuilder {
  public:
+  enum class ClassFallbackMode {
+    None,
+    FunctionsFromBaseClasses,
+  };
+
   UseResolverBuilder(
       const Program& program,
       const SymbolTable& symbol_table,
@@ -62,7 +67,7 @@ class UseResolverBuilder {
         throw std::runtime_error("symbol table is incorrect for this program");
       }
 
-      class_scopes_.insert(class_scope);
+      class_declaration_by_scope_[class_scope] = class_declaration;
     }
 
     initialized_ = true;
@@ -86,7 +91,7 @@ class UseResolverBuilder {
     }
 
     return declaration_scope == global_scope_ ||
-           class_scopes_.contains(declaration_scope);
+           class_declaration_by_scope_.contains(declaration_scope);
   }
 
   bool IsClassScopeOwner(const ASTNode* scope_owner) const {
@@ -95,7 +100,34 @@ class UseResolverBuilder {
       throw std::runtime_error("symbol table is incorrect for this program");
     }
 
-    return class_scopes_.contains(scope);
+    return class_declaration_by_scope_.contains(scope);
+  }
+
+  const ClassDeclarationStatement* GetClassDeclarationForScope(
+      const LocalSymbolTable* scope) const {
+    const auto class_it = class_declaration_by_scope_.find(scope);
+    if (class_it == class_declaration_by_scope_.end()) {
+      return nullptr;
+    }
+
+    return class_it->second;
+  }
+
+  UseResolver::ResolvedSymbol BuildResolvedSymbol(
+      const SymbolData& symbol_data,
+      const ClassDeclarationStatement* declaring_class) const {
+    return UseResolver::ResolvedSymbol{
+        symbol_data.declaration_node,
+        symbol_data,
+        declaring_class};
+  }
+
+  UseResolver::ResolvedSymbol BuildResolvedSymbol(
+      const SymbolData& symbol_data,
+      const LocalSymbolTable* declaring_scope) const {
+    return BuildResolvedSymbol(
+        symbol_data,
+        GetClassDeclarationForScope(declaring_scope));
   }
 
   bool IsSymbolVisible(
@@ -134,7 +166,8 @@ class UseResolverBuilder {
 
   std::optional<UseResolver::ResolvedSymbol> ResolveUse(
       const std::string& name,
-      const ASTNode* use_node) const {
+      const ASTNode* use_node,
+      ClassFallbackMode class_fallback_mode) {
     const LocalSymbolTable* scope = symbol_table_.GetTable(use_node);
     if (scope == nullptr) {
       throw std::runtime_error("symbol table is incorrect for this program");
@@ -146,14 +179,30 @@ class UseResolverBuilder {
          local_scope = local_scope->GetParent()) {
       const SymbolData* local_symbol =
           local_scope->GetSymbolInfoInLocalScope(name);
-      if (local_symbol == nullptr) {
+      if (local_symbol != nullptr &&
+          IsSymbolVisible(*local_symbol, use_ref)) {
+        return BuildResolvedSymbol(*local_symbol, local_scope);
+      }
+
+      const ClassDeclarationStatement* current_class =
+          GetClassDeclarationForScope(local_scope);
+      if (current_class == nullptr ||
+          class_fallback_mode == ClassFallbackMode::None) {
         continue;
       }
 
-      if (IsSymbolVisible(*local_symbol, use_ref)) {
-        return UseResolver::ResolvedSymbol{
-            local_symbol->declaration_node,
-            *local_symbol};
+      const std::optional<ClassMemberLookupResult> lookup_result = LookupClassMember(
+          *current_class,
+          name,
+          ClassMemberSearchMode::CurrentClassAndBases,
+          symbol_table_,
+          type_definer_);
+      if (lookup_result.has_value()) {
+        assert(lookup_result->symbol_data != nullptr);
+        assert(lookup_result->declaring_class != nullptr);
+        return BuildResolvedSymbol(
+            *lookup_result->symbol_data,
+            lookup_result->declaring_class);
       }
     }
 
@@ -163,9 +212,10 @@ class UseResolverBuilder {
 
   const UseResolver::ResolvedSymbol* RegisterUse(
       const ASTNode* use_node,
-      const std::string& name) {
+      const std::string& name,
+      ClassFallbackMode class_fallback_mode = ClassFallbackMode::None) {
     const std::optional<UseResolver::ResolvedSymbol> resolved_symbol =
-        ResolveUse(name, use_node);
+        ResolveUse(name, use_node, class_fallback_mode);
     if (!resolved_symbol.has_value()) {
       return nullptr;
     }
@@ -201,15 +251,25 @@ class UseResolverBuilder {
     return class_declaration;
   }
 
-  const SymbolData* GetClassMemberInLocalScope(
+  std::optional<UseResolver::ResolvedSymbol> ResolveClassMember(
       const ClassDeclarationStatement& class_declaration,
-      const std::string& member_name) const {
-    const LocalSymbolTable* class_scope = symbol_table_.GetTable(&class_declaration);
-    if (class_scope == nullptr) {
-      throw std::runtime_error("symbol table is incorrect for this program");
+      const std::string& member_name,
+      ClassMemberSearchMode search_mode) {
+    const std::optional<ClassMemberLookupResult> lookup_result = LookupClassMember(
+        class_declaration,
+        member_name,
+        search_mode,
+        symbol_table_,
+        type_definer_);
+    if (!lookup_result.has_value()) {
+      return UseResolver::ResolvedSymbol{};
     }
 
-    return class_scope->GetSymbolInfoInLocalScope(member_name);
+    assert(lookup_result->symbol_data != nullptr);
+    assert(lookup_result->declaring_class != nullptr);
+    return BuildResolvedSymbol(
+        *lookup_result->symbol_data,
+        lookup_result->declaring_class);
   }
 
   void ResolveMethodCallMember(
@@ -224,11 +284,17 @@ class UseResolverBuilder {
       return;
     }
 
-    const SymbolData* method_symbol =
-        GetClassMemberInLocalScope(
+    const std::optional<UseResolver::ResolvedSymbol> resolved_method =
+        ResolveClassMember(
             *class_declaration,
-            method_call.function_call.function_name);
-    if (method_symbol == nullptr || method_symbol->kind != SymbolKind::Function) {
+            method_call.function_call.function_name,
+            ClassMemberSearchMode::CurrentClassAndBases);
+    if (!resolved_method.has_value()) {
+      return;
+    }
+
+    if (resolved_method->definition_node == nullptr ||
+        resolved_method->symbol_data.kind != SymbolKind::Function) {
       debug_ctx_.GetErrors().AddError(
           &method_call,
           "unknown method " + method_call.function_call.function_name +
@@ -240,9 +306,7 @@ class UseResolverBuilder {
         UseResolver::Use{
             &method_call.function_call,
             method_call.function_call.function_name},
-        UseResolver::ResolvedSymbol{
-            method_symbol->declaration_node,
-            *method_symbol});
+        *resolved_method);
   }
 
   void ResolveFieldAccessMember(
@@ -257,11 +321,17 @@ class UseResolverBuilder {
       return;
     }
 
-    const SymbolData* field_symbol =
-        GetClassMemberInLocalScope(
+    const std::optional<UseResolver::ResolvedSymbol> resolved_field =
+        ResolveClassMember(
             *class_declaration,
-            field_access.field_name.name);
-    if (field_symbol == nullptr || field_symbol->kind != SymbolKind::Variable) {
+            field_access.field_name.name,
+            ClassMemberSearchMode::CurrentClassOnly);
+    if (!resolved_field.has_value()) {
+      return;
+    }
+
+    if (resolved_field->definition_node == nullptr ||
+        resolved_field->symbol_data.kind != SymbolKind::Variable) {
       debug_ctx_.GetErrors().AddError(
           &field_access,
           "unknown field " + field_access.field_name.name +
@@ -271,9 +341,7 @@ class UseResolverBuilder {
 
     use_to_resolved_symbol_.insert_or_assign(
         UseResolver::Use{&field_access.field_name, field_access.field_name.name},
-        UseResolver::ResolvedSymbol{
-            field_symbol->declaration_node,
-            *field_symbol});
+        *resolved_field);
   }
 
   void VisitStatements(const List<Statement>& statements) {
@@ -300,6 +368,9 @@ class UseResolverBuilder {
             },
             [this](const PrintStatement& print_statement) {
               VisitPrintStatement(print_statement);
+            },
+            [this](const DeleteStatement& delete_statement) {
+              VisitDeleteStatement(delete_statement);
             },
             [this](const IfStatement& if_statement) {
               VisitIfStatement(if_statement);
@@ -347,6 +418,10 @@ class UseResolverBuilder {
   void VisitPrintStatement(const PrintStatement& print_statement) {
     assert(print_statement.expr != nullptr);
     VisitExpression(*print_statement.expr);
+  }
+
+  void VisitDeleteStatement(const DeleteStatement& delete_statement) {
+    RegisterUse(&delete_statement.variable, delete_statement.variable.name);
   }
 
   void VisitIfStatement(const IfStatement& if_statement) {
@@ -400,7 +475,10 @@ class UseResolverBuilder {
             },
             [this](const FunctionCall& function_call) {
               const UseResolver::ResolvedSymbol* resolved_symbol =
-                  RegisterUse(&function_call, function_call.function_name);
+                  RegisterUse(
+                      &function_call,
+                      function_call.function_name,
+                      ClassFallbackMode::FunctionsFromBaseClasses);
               if (resolved_symbol != nullptr &&
                   resolved_symbol->symbol_data.kind != SymbolKind::Function) {
                 debug_ctx_.GetErrors().AddError(
@@ -452,7 +530,8 @@ class UseResolverBuilder {
   DebugCtx& debug_ctx_;
   bool initialized_ = false;
   const LocalSymbolTable* global_scope_ = nullptr;
-  std::set<const LocalSymbolTable*> class_scopes_;
+  std::map<const LocalSymbolTable*, const ClassDeclarationStatement*>
+      class_declaration_by_scope_;
   std::map<UseResolver::Use, UseResolver::ResolvedSymbol> use_to_resolved_symbol_;
 };
 

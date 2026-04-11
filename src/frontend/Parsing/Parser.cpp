@@ -78,6 +78,9 @@ class AstDebugInfoPropagator {
             [this, current_debug_info](const PrintStatement& print_statement) {
               VisitPrintStatement(print_statement, current_debug_info);
             },
+            [this, current_debug_info](const DeleteStatement& delete_statement) {
+              VisitDeleteStatement(delete_statement, current_debug_info);
+            },
             [this, current_debug_info](const IfStatement& if_statement) {
               VisitIfStatement(if_statement, current_debug_info);
             },
@@ -151,6 +154,14 @@ class AstDebugInfoPropagator {
     if (print_statement.expr != nullptr) {
       VisitExpression(*print_statement.expr, current_debug_info);
     }
+  }
+
+  void VisitDeleteStatement(
+      const DeleteStatement& delete_statement,
+      const DebugInfo* inherited_debug_info) {
+    const DebugInfo* current_debug_info =
+        EnsureNodeDebugInfo(delete_statement, inherited_debug_info);
+    EnsureNodeDebugInfo(delete_statement.variable, current_debug_info);
   }
 
   void VisitIfStatement(

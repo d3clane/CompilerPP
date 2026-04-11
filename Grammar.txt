@@ -38,6 +38,8 @@ assign_stmt = ident "=" expr ";" ;
 
 print_stmt = "print" "(" expr ")" ";" ;
 
+delete_stmt = "delete" ident ";" ;
+
 if_stmt = "if" expr block else_tail ;
 
 else_tail = "else" if_stmt | "else" block | \eps ;
@@ -50,7 +52,7 @@ expr_stmt = expr ";" ;
 
 block = "{" stmt* "}" ;
 
-stmt = decl_stmt | assign_stmt | print_stmt | if_stmt | return_stmt | expr_stmt | block ;
+stmt = decl_stmt | assign_stmt | print_stmt | delete_stmt | if_stmt | return_stmt | expr_stmt | block ;
 
 func_call = ident "(" call_args_opt ")" ;
 

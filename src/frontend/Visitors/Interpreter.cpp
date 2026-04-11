@@ -309,6 +309,10 @@ void ExecuteReturn(const ReturnStatement&) {
   throw std::runtime_error("Return statements are not supported by interpreter");
 }
 
+void ExecuteDelete(const DeleteStatement&) {
+  throw std::runtime_error("Delete statements are not supported by interpreter");
+}
+
 void ExecuteStatement(
     const Statement& statement,
     InterpreterRuntime& runtime,
@@ -329,6 +333,9 @@ void ExecuteStatement(
           },
           [&runtime, &output](const PrintStatement& print_statement) {
             ExecutePrint(print_statement, runtime, output);
+          },
+          [](const DeleteStatement& delete_statement) {
+            ExecuteDelete(delete_statement);
           },
           [&runtime, &output](const IfStatement& if_statement) {
             ExecuteIf(if_statement, runtime, output);

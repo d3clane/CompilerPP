@@ -154,6 +154,9 @@ class StatementNumerizerBuilder {
             [this](const PrintStatement& print_statement) {
               VisitPrintStatement(print_statement);
             },
+            [this](const DeleteStatement& delete_statement) {
+              VisitDeleteStatement(delete_statement);
+            },
             [this](const IfStatement& if_statement) {
               VisitIfStatement(if_statement);
             },
@@ -222,6 +225,11 @@ class StatementNumerizerBuilder {
     BindNodeToCurrentStatement(&print_statement);
     assert(print_statement.expr != nullptr);
     VisitExpression(*print_statement.expr);
+  }
+
+  void VisitDeleteStatement(const DeleteStatement& delete_statement) {
+    BindNodeToCurrentStatement(&delete_statement);
+    BindNodeToCurrentStatement(&delete_statement.variable);
   }
 
   void VisitIfStatement(const IfStatement& if_statement) {

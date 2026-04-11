@@ -25,6 +25,7 @@ ADD_TOKEN(FalseKeyword)
 ADD_TOKEN(PrintKeyword)
 ADD_TOKEN(IfKeyword)
 ADD_TOKEN(ElseKeyword)
+ADD_TOKEN(DeleteKeyword)
 
 ADD_TOKEN(Assign)
 ADD_TOKEN(AndAnd)
@@ -78,6 +79,7 @@ using TokenVariant = std::variant<
     PrintKeyword,
     IfKeyword,
     ElseKeyword,
+    DeleteKeyword,
     Assign,
     AndAnd,
     OrOr,

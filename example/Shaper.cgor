@@ -1,0 +1,147 @@
+class Shape {
+    var x int = 0;
+    var y int = 15;
+
+    func InitShape(x_ int, y_ int) {
+        x = x_;
+        y = y_;
+    }
+
+    func GetX() int {
+        return x;
+    }
+
+    func GetY() int {
+        return y;
+    }
+
+    func draw() {
+        print(100);
+        print(x);
+        print(y);
+    }
+}
+
+class Circle : Shape {
+    var radius int;
+
+    func InitCircle(x_ int, y_ int, radius_ int) {
+        InitShape(x_, y_);
+        radius = radius_;
+    }
+
+    func draw() {
+        print(200);
+        print(GetX());
+        print(GetY());
+        print(radius);
+    }
+}
+
+class Rectangle : Shape {
+    var width int;
+    var height int = 3;
+
+    func InitRectangle(x_ int, y_ int, width_ int, height_ int) {
+        InitShape(x_, y_);
+        width = width_;
+        height = height_;
+    }
+
+    func GetWidth() int {
+        return width;
+    }
+
+    func GetHeight() int {
+        return height;
+    }
+
+    func draw() {
+        print(300);
+        print(GetX());
+        print(GetY());
+        print(width);
+        print(height);
+    }
+
+    func resize(multiplier1 int, multiplier2 int) {
+        width = width * multiplier1;
+        height = height * multiplier2;
+    }
+}
+
+class Square : Shape {
+    var side int;
+
+    func InitSquare(x_ int, y_ int, side_ int) {
+        InitShape(x_, y_);
+        side = side_;
+    }
+
+    func draw() {
+        print(400);
+        print(GetX());
+        print(GetY());
+        print(side);
+    }
+}
+
+class PrettyRectangle : Rectangle {
+    func InitPrettyRectangle(x_ int, y_ int, width_ int, height_ int) {
+        InitRectangle(x_, y_, width_, height_);
+    }
+
+    func draw() {
+        print(500);
+        print(GetX());
+        print(GetY());
+        print(GetWidth());
+        print(GetHeight());
+    }
+}
+
+func drawer(shape Shape) {
+    print(999);
+    shape.draw();
+}
+
+func main() {
+    var shape Shape;
+    shape.InitShape(1, 2);
+
+    var circle Circle;
+    circle.InitCircle(3, 4, 5);
+
+    var rectangle Rectangle;
+    rectangle.InitRectangle(6, 7, 8, 9);
+
+    var square Square;
+    square.InitSquare(10, 11, 12);
+
+    var pretty PrettyRectangle;
+    pretty.InitPrettyRectangle(13, 14, 15, 16);
+
+    drawer(shape);
+    drawer(circle);
+    drawer(rectangle);
+    drawer(square);
+    drawer(pretty);
+
+    pretty.resize(2, 3);
+    drawer(pretty);
+
+    print(2 == 3);
+
+    func another_drawer(shape Shape) {
+        print(777);
+        shape.draw();
+    }
+
+    another_drawer(pretty);
+
+    delete shape;
+    delete circle;
+    delete rectangle;
+    delete pretty;
+    delete square;
+}

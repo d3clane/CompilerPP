@@ -8,6 +8,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(BISON 3.8 REQUIRED)
 find_package(FLEX REQUIRED)
+find_program(LLVM_CONFIG_EXE NAMES llvm-config REQUIRED)
+execute_process(
+  COMMAND "${LLVM_CONFIG_EXE}" --includedir
+  OUTPUT_VARIABLE LLVM_INCLUDE_DIR
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+  COMMAND "${LLVM_CONFIG_EXE}" --libfiles core
+  OUTPUT_VARIABLE LLVM_CORE_LIB
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${GENERATED_DIR}")
@@ -34,10 +45,16 @@ add_library(
   ${FLEX_CompilerLexer_OUTPUTS}
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Types.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMConstructUtils.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMIRLowering.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Utils/ClassMemberLookup.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Printer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Interpreter.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/StatementNumerizer.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/ClassRelations.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/FunctionRelations.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/GlobalRelations.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/SymbolTable.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/TypeDefiner.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/SemanticAnalysis/Resolver.cpp"
@@ -50,6 +67,14 @@ target_include_directories(
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include/frontend"
     "${GENERATED_DIR}"
+  PRIVATE
+    "${LLVM_INCLUDE_DIR}"
+)
+
+target_link_libraries(
+  compiler_frontend
+  PRIVATE
+    "${LLVM_CORE_LIB}"
 )
 
 target_compile_features(compiler_frontend PUBLIC cxx_std_20)
@@ -79,6 +104,7 @@ add_executable(
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/SymbolTableTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/ResolverTests.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/tests/TypeCheckerTests.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/tests/LoweringTests.cpp"
 )
 
 target_link_libraries(

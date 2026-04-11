@@ -16,6 +16,7 @@ class UseResolver {
   struct ResolvedSymbol {
     const ASTNode* definition_node = nullptr;
     SymbolData symbol_data;
+    const ClassDeclarationStatement* declaring_class = nullptr;
   };
 
   struct Use {

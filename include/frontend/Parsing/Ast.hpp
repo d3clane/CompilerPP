@@ -327,6 +327,17 @@ struct PrintStatement : ASTNode {
   ADD_OPERATOR_EQUAL(PrintStatement)
 };
 
+struct DeleteStatement : ASTNode {
+  DeleteStatement() = default;
+
+  explicit DeleteStatement(IdentifierExpression variable_in)
+      : variable(std::move(variable_in)) {}
+
+  IdentifierExpression variable;
+
+  ADD_OPERATOR_EQUAL(DeleteStatement)
+};
+
 struct ReturnStatement : ASTNode {
   ReturnStatement() = default;
 
@@ -469,6 +480,7 @@ using StatementVariant = std::variant<
     ClassDeclarationStatement,
     AssignmentStatement,
     PrintStatement,
+    DeleteStatement,
     IfStatement,
     ReturnStatement,
     Expression,

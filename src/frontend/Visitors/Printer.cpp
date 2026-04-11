@@ -377,6 +377,10 @@ std::string PrintPrintStatement(const PrintStatement& print_statement) {
   return "print(" + PrintExpression(*print_statement.expr) + ");";
 }
 
+std::string PrintDeleteStatement(const DeleteStatement& delete_statement) {
+  return "delete " + delete_statement.variable.name + ";";
+}
+
 std::string PrintReturnStatement(const ReturnStatement& return_statement) {
   if (return_statement.expr == nullptr) {
     return "return;";
@@ -423,6 +427,9 @@ std::string PrintStatementNode(const Statement& statement) {
           },
           [](const PrintStatement& print_statement) -> std::string {
             return PrintPrintStatement(print_statement);
+          },
+          [](const DeleteStatement& delete_statement) -> std::string {
+            return PrintDeleteStatement(delete_statement);
           },
           [](const IfStatement& if_statement) -> std::string {
             return PrintIfStatement(if_statement);

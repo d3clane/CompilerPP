@@ -243,7 +243,7 @@ TEST(SymbolTableTests, BuildsSymbolTableForFieldAccessReceiverUseContext) {
   EXPECT_NE(symbol_table.GetTable(field_access), nullptr);
 }
 
-TEST(SymbolTableTests, DerivedClassScopeContainsInheritedBaseField) {
+TEST(SymbolTableTests, DerivedClassScopeDoesNotContainInheritedBaseField) {
   const std::string source =
       "class Base { var value int; }\n"
       "class Derived:Base { func noop() { } }\n";
@@ -264,13 +264,12 @@ TEST(SymbolTableTests, DerivedClassScopeContainsInheritedBaseField) {
       std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
   ASSERT_NE(derived_class, nullptr);
 
-  const Parsing::SymbolData* inherited_value =
-      FindVisibleSymbol(symbol_table, "value", derived_class);
-  ASSERT_NE(inherited_value, nullptr);
-  EXPECT_EQ(inherited_value->declaration_node, &base_class->fields[0]);
+  const Parsing::LocalSymbolTable* derived_scope = symbol_table.GetTable(derived_class);
+  ASSERT_NE(derived_scope, nullptr);
+  EXPECT_EQ(derived_scope->GetSymbolInfoInLocalScope("value"), nullptr);
 }
 
-TEST(SymbolTableTests, DerivedClassMethodCanRedeclareInheritedMethod) {
+TEST(SymbolTableTests, DerivedClassMethodKeepsLocalOverride) {
   const std::string source =
       "class Base { func ping() int { return 1; } }\n"
       "class Derived:Base { func ping() int { return 2; } }\n";
@@ -290,19 +289,35 @@ TEST(SymbolTableTests, DerivedClassMethodCanRedeclareInheritedMethod) {
   ASSERT_NE(derived_class, nullptr);
   ASSERT_EQ(derived_class->methods.size(), 1u);
 
+  const Parsing::LocalSymbolTable* derived_scope = symbol_table.GetTable(derived_class);
+  ASSERT_NE(derived_scope, nullptr);
   const Parsing::SymbolData* ping_symbol =
-      FindVisibleSymbol(symbol_table, "ping", derived_class);
+      derived_scope->GetSymbolInfoInLocalScope("ping");
   ASSERT_NE(ping_symbol, nullptr);
-  EXPECT_EQ(ping_symbol->declaration_node, &base_class->methods[0]);
+  EXPECT_EQ(ping_symbol->declaration_node, &derived_class->methods[0]);
 }
 
-TEST(SymbolTableTests, ThrowsWhenDerivedClassRedefinesInheritedField) {
+TEST(SymbolTableTests, AllowsDerivedClassToRedefineInheritedField) {
   const std::string source =
       "class Base { var x int; }\n"
       "class Derived:Base { var x int; }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
-  EXPECT_THROW(Parsing::BuildSymbolTable(program), std::runtime_error);
+  const Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+
+  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* derived_class =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(derived_class, nullptr);
+  ASSERT_EQ(derived_class->fields.size(), 1u);
+
+  const Parsing::LocalSymbolTable* derived_scope = symbol_table.GetTable(derived_class);
+  ASSERT_NE(derived_scope, nullptr);
+  const Parsing::SymbolData* x_symbol =
+      derived_scope->GetSymbolInfoInLocalScope("x");
+  ASSERT_NE(x_symbol, nullptr);
+  EXPECT_EQ(x_symbol->declaration_node, &derived_class->fields[0]);
 }
 
 TEST(SymbolTableTests, SupportsInheritanceWhenBaseDeclaredAfterDerived) {
@@ -326,10 +341,9 @@ TEST(SymbolTableTests, SupportsInheritanceWhenBaseDeclaredAfterDerived) {
   ASSERT_NE(base_class, nullptr);
   ASSERT_EQ(base_class->fields.size(), 1u);
 
-  const Parsing::SymbolData* inherited_value =
-      FindVisibleSymbol(symbol_table, "value", derived_class);
-  ASSERT_NE(inherited_value, nullptr);
-  EXPECT_EQ(inherited_value->declaration_node, &base_class->fields[0]);
+  const Parsing::LocalSymbolTable* derived_scope = symbol_table.GetTable(derived_class);
+  ASSERT_NE(derived_scope, nullptr);
+  EXPECT_EQ(derived_scope->GetSymbolInfoInLocalScope("value"), nullptr);
 }
 
 TEST(SymbolTableTests, SupportsMethodOverrideWhenBaseDeclaredAfterDerived) {
@@ -352,13 +366,15 @@ TEST(SymbolTableTests, SupportsMethodOverrideWhenBaseDeclaredAfterDerived) {
   ASSERT_NE(base_class, nullptr);
   ASSERT_EQ(base_class->methods.size(), 1u);
 
+  const Parsing::LocalSymbolTable* derived_scope = symbol_table.GetTable(derived_class);
+  ASSERT_NE(derived_scope, nullptr);
   const Parsing::SymbolData* method_symbol =
-      FindVisibleSymbol(symbol_table, "ping", derived_class);
+      derived_scope->GetSymbolInfoInLocalScope("ping");
   ASSERT_NE(method_symbol, nullptr);
-  EXPECT_EQ(method_symbol->declaration_node, &base_class->methods[0]);
+  EXPECT_EQ(method_symbol->declaration_node, &derived_class->methods[0]);
 }
 
-TEST(SymbolTableTests, UsesMostBaseMethodDeclarationAcrossInheritanceChain) {
+TEST(SymbolTableTests, KeepsMostDerivedMethodDeclarationAcrossInheritanceChain) {
   const std::string source =
       "class A { func ping() int { return 1; } }\n"
       "class B:A { func ping() int { return 2; } }\n"
@@ -381,10 +397,12 @@ TEST(SymbolTableTests, UsesMostBaseMethodDeclarationAcrossInheritanceChain) {
   ASSERT_NE(derived_class, nullptr);
   ASSERT_EQ(derived_class->methods.size(), 1u);
 
+  const Parsing::LocalSymbolTable* derived_scope = symbol_table.GetTable(derived_class);
+  ASSERT_NE(derived_scope, nullptr);
   const Parsing::SymbolData* method_symbol =
-      FindVisibleSymbol(symbol_table, "ping", derived_class);
+      derived_scope->GetSymbolInfoInLocalScope("ping");
   ASSERT_NE(method_symbol, nullptr);
-  EXPECT_EQ(method_symbol->declaration_node, &base_class->methods[0]);
+  EXPECT_EQ(method_symbol->declaration_node, &derived_class->methods[0]);
 }
 
 }  // namespace

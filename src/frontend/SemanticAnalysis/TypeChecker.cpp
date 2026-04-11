@@ -289,6 +289,9 @@ class TypeCheckerVisitor {
             [this](const PrintStatement& print_statement) {
               VisitPrintStatement(print_statement);
             },
+            [this](const DeleteStatement& delete_statement) {
+              VisitDeleteStatement(delete_statement);
+            },
             [this](const IfStatement& if_statement) {
               VisitIfStatement(if_statement);
             },
@@ -369,10 +372,18 @@ class TypeCheckerVisitor {
   void VisitClassDeclarationStatement(
       const ClassDeclarationStatement& class_declaration) {
     if (class_declaration.base_class_name.has_value()) {
-      if (type_definer_.GetClassDeclaration(*class_declaration.base_class_name) == nullptr) {
+      const ClassDeclarationStatement* base_class =
+          type_definer_.GetClassDeclaration(*class_declaration.base_class_name);
+      if (base_class == nullptr) {
         ReportCodeError(
             &class_declaration,
             "Unknown base class: " + *class_declaration.base_class_name);
+      } else if (IsDerivedClassOf(
+                     base_class->class_name,
+                     class_declaration.class_name)) {
+        ReportCodeError(
+            &class_declaration,
+            "Cyclic class inheritance detected");
       }
     }
 
@@ -416,6 +427,30 @@ class TypeCheckerVisitor {
   void VisitPrintStatement(const PrintStatement& print_statement) {
     assert(print_statement.expr != nullptr);
     RequireValueType(*print_statement.expr, "Print statement");
+  }
+
+  void VisitDeleteStatement(const DeleteStatement& delete_statement) {
+    const UseResolver::ResolvedSymbol* resolved_symbol = ResolveUsedSymbol(
+        delete_statement.variable.name,
+        &delete_statement.variable,
+        "Delete statement");
+    if (recovering_from_error_) {
+      return;
+    }
+
+    if (resolved_symbol->symbol_data.kind != SymbolKind::Variable &&
+        resolved_symbol->symbol_data.kind != SymbolKind::Parameter) {
+      ReportCodeError(
+          &delete_statement.variable,
+          "Delete target must be a variable: " + delete_statement.variable.name);
+      return;
+    }
+
+    if (!std::holds_alternative<ClassType>(resolved_symbol->symbol_data.type.type)) {
+      ReportCodeError(
+          &delete_statement.variable,
+          "Delete target must have class type: " + delete_statement.variable.name);
+    }
   }
 
   void VisitIfStatement(const IfStatement& if_statement) {
