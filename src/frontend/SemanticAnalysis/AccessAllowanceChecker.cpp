@@ -100,6 +100,8 @@ class AccessAllowanceCheckerVisitor {
               assert(print_statement.expr != nullptr);
               VisitExpression(*print_statement.expr);
             },
+            [](const DeleteStatement&) {
+            },
             [this](const IfStatement& if_statement) {
               VisitIfStatement(if_statement);
             },

@@ -367,6 +367,9 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
             AppendLine(output, indent, "PrintStatement:");
             PrintExpressionTree(*print_statement.expr, indent + 1, output);
           },
+          [&output, indent](const DeleteStatement& delete_statement) {
+            AppendLine(output, indent, "DeleteStatement: " + delete_statement.variable.name);
+          },
           [&output, indent](const IfStatement& if_statement) {
             PrintIfStatementTree(if_statement, indent, output);
           },

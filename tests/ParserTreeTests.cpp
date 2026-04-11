@@ -483,6 +483,35 @@ TEST(ParserTreeTests, ParsesFieldAccessExpression) {
   EXPECT_EQ(Parsing::PrintInfix(program), source);
 }
 
+TEST(ParserTreeTests, ParsesDeleteStatement) {
+  const std::string source =
+      "class Box { }\n"
+      "var box Box;\n"
+      "func main() { delete box; }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+
+  ASSERT_EQ(program.top_statements.size(), 3u);
+  ASSERT_NE(program.top_statements[2], nullptr);
+
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[2]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
+  const auto* delete_statement =
+      std::get_if<Parsing::DeleteStatement>(&main_function->body->statements[0]->value);
+  ASSERT_NE(delete_statement, nullptr);
+  EXPECT_EQ(delete_statement->variable.name, "box");
+
+  EXPECT_EQ(Parsing::PrintInfix(program), source);
+  EXPECT_NE(
+      Parsing::PrintAstTree(program).find("DeleteStatement: box"),
+      std::string::npos);
+}
+
 TEST(ParserTreeTests, PrintsProgramInInfixOrder) {
   const std::string source =
       "var mutable x int = 1 + 2;\n"

@@ -130,6 +130,27 @@ TEST(LoweringTests, LowersGlobalClassInitializationIntoGlobalInitFunction) {
       std::string::npos);
 }
 
+TEST(LoweringTests, LowersDeleteStatementThroughClassDeallocator) {
+  const std::string source =
+      "class Node { var value int = 7; }\n"
+      "func main() { var node Node; delete node; }\n";
+
+  const std::string ir = LowerSource(source);
+
+  EXPECT_NE(
+      ir.find("declare void @free(ptr)"),
+      std::string::npos);
+  EXPECT_NE(
+      ir.find("define void @delete__Node(ptr %__object) {"),
+      std::string::npos);
+  EXPECT_NE(
+      ir.find("call void @free(ptr %__object)"),
+      std::string::npos);
+  EXPECT_TRUE(std::regex_search(
+      ir,
+      std::regex(R"(call void @delete__Node\(ptr %[A-Za-z0-9_]+\))")));
+}
+
 TEST(LoweringTests, KeepsNestedFunctionMangledWhileGlobalFunctionStaysPlain) {
   const std::string source =
       "func Foo() int { return 1; }\n"

@@ -81,6 +81,13 @@ class NodeNameBuilder {
         &class_declaration);
   }
 
+  std::string BuildClassDeallocatorName(
+      const ClassDeclarationStatement& class_declaration) const {
+    return BuildScopedDeclarationName(
+        "delete__" + class_declaration.class_name,
+        &class_declaration);
+  }
+
   std::string BuildFunctionName(
       const FunctionDeclarationStatement& function_declaration,
       const ClassDeclarationStatement* owner_class) const {
@@ -181,6 +188,7 @@ struct ClassInfo {
   std::string type_name;
   std::string vtable_name;
   std::string allocator_name;
+  std::string deallocator_name;
   std::vector<FuncType> slot_types;
   std::vector<const FunctionDeclarationStatement*> vtable_methods;
   std::map<std::string, size_t> slot_index_by_name;
@@ -221,6 +229,8 @@ class PreparedStateBuilder {
       class_info.vtable_name = name_builder.BuildClassVTableName(*class_declaration);
       class_info.allocator_name =
           name_builder.BuildClassAllocatorName(*class_declaration);
+      class_info.deallocator_name =
+          name_builder.BuildClassDeallocatorName(*class_declaration);
       state.class_info_by_decl.emplace(class_declaration, std::move(class_info));
     }
 
@@ -392,6 +402,7 @@ class FunctionLoweringContext {
   void LowerDeclaration(const DeclarationStatement& declaration);
   void LowerAssignment(const AssignmentStatement& assignment);
   void LowerPrint(const PrintStatement& print_statement);
+  void LowerDelete(const DeleteStatement& delete_statement);
   void LowerReturn(const ReturnStatement& return_statement);
   void LowerElseTail(const ElseTail& else_tail);
   void LowerIf(const IfStatement& if_statement);
@@ -427,6 +438,7 @@ class LLVMModuleBuilder {
     CreateFunctionDeclarations();
     CreateVTableGlobals();
     DefineAllocatorFunctions();
+    DefineDeallocatorFunctions();
     DefineUserFunctions();
     DefineGlobalInitFunction();
     DefineMainWrapper();
@@ -445,6 +457,7 @@ class LLVMModuleBuilder {
     llvm::StructType* type = nullptr;
     llvm::ArrayType* vtable_type = nullptr;
     llvm::Function* allocator = nullptr;
+    llvm::Function* deallocator = nullptr;
     llvm::GlobalVariable* vtable = nullptr;
   };
 
@@ -466,6 +479,14 @@ class LLVMModuleBuilder {
             false),
         llvm::GlobalValue::ExternalLinkage,
         "calloc",
+        module_);
+    free_function_ = llvm::Function::Create(
+        llvm::FunctionType::get(
+            llvm::Type::getVoidTy(context_),
+            {llvm::PointerType::getUnqual(context_)},
+            false),
+        llvm::GlobalValue::ExternalLinkage,
+        "free",
         module_);
     printf_function_ = llvm::Function::Create(
         llvm::FunctionType::get(
@@ -571,6 +592,15 @@ class LLVMModuleBuilder {
           llvm::GlobalValue::ExternalLinkage,
           class_info.allocator_name,
           module_);
+      llvm_class_data_by_decl_.at(class_declaration).deallocator =
+          llvm::Function::Create(
+              llvm::FunctionType::get(
+                  llvm::Type::getVoidTy(context_),
+                  {llvm::PointerType::getUnqual(context_)},
+                  false),
+              llvm::GlobalValue::ExternalLinkage,
+              class_info.deallocator_name,
+              module_);
     }
   }
 
@@ -633,6 +663,23 @@ class LLVMModuleBuilder {
 
       context.EmitClassDefaultInitializers(*class_declaration, allocated_object);
       context.Builder().CreateRet(allocated_object);
+    }
+  }
+
+  void DefineDeallocatorFunctions() {
+    const auto& ordered_classes = state_.class_relations.GetClassesBaseFirstOrder();
+    for (const ClassDeclarationStatement* class_declaration : ordered_classes) {
+      assert(class_declaration != nullptr);
+
+      llvm::Function* deallocator =
+          llvm_class_data_by_decl_.at(class_declaration).deallocator;
+      auto* entry_block = llvm::BasicBlock::Create(context_, "entry", deallocator);
+      llvm::IRBuilder<> builder(entry_block);
+
+      llvm::Argument* object_pointer = &*deallocator->arg_begin();
+      object_pointer->setName("__object");
+      builder.CreateCall(free_function_, {object_pointer});
+      builder.CreateRetVoid();
     }
   }
 
@@ -791,6 +838,7 @@ class LLVMModuleBuilder {
   std::map<const DeclarationStatement*, llvm::GlobalVariable*> llvm_global_by_decl_;
 
   llvm::Function* calloc_function_ = nullptr;
+  llvm::Function* free_function_ = nullptr;
   llvm::Function* printf_function_ = nullptr;
   llvm::Function* puts_function_ = nullptr;
   llvm::Function* global_init_function_ = nullptr;
@@ -1714,6 +1762,50 @@ void FunctionLoweringContext::LowerPrint(const PrintStatement& print_statement) 
           lowered_value->value});
 }
 
+void FunctionLoweringContext::LowerDelete(const DeleteStatement& delete_statement) {
+  const UseResolver::ResolvedSymbol* resolved_symbol =
+      owner_.use_resolver_.GetResolvedSymbol(
+          delete_statement.variable.name,
+          &delete_statement.variable);
+  assert(resolved_symbol != nullptr);
+
+  llvm::Value* target_pointer = nullptr;
+  Type target_type = resolved_symbol->symbol_data.type;
+  if (const ClassDeclarationStatement* owner_class =
+          owner_.state_.class_relations.GetFieldOwner(resolved_symbol->definition_node);
+      owner_class != nullptr) {
+    assert(current_this_value_ != nullptr);
+
+    const auto* field_declaration =
+        static_cast<const DeclarationStatement*>(resolved_symbol->definition_node);
+    llvm::Value* field_ptr = BuildFieldPointer(
+        *owner_class,
+        *field_declaration,
+        current_this_value_);
+    target_pointer = EmitLoad(field_ptr, field_declaration->type);
+    target_type = field_declaration->type;
+  } else if (const std::optional<StorageLocation> storage =
+                 GetStorageForNode(resolved_symbol->definition_node);
+             storage.has_value()) {
+    target_pointer = EmitLoad(storage->pointer, storage->stored_type);
+    target_type = storage->stored_type;
+  } else if (const auto global_it =
+                 owner_.llvm_global_by_decl_.find(
+                     static_cast<const DeclarationStatement*>(
+                         resolved_symbol->definition_node));
+             global_it != owner_.llvm_global_by_decl_.end()) {
+    target_pointer = EmitLoad(global_it->second, resolved_symbol->symbol_data.type);
+  } else {
+    assert(false && "delete target must resolve before lowering");
+  }
+
+  const ClassDeclarationStatement* class_declaration =
+      ResolveClassDeclaration(target_type);
+  builder_.CreateCall(
+      owner_.llvm_class_data_by_decl_.at(class_declaration).deallocator,
+      {target_pointer});
+}
+
 void FunctionLoweringContext::LowerReturn(const ReturnStatement& return_statement) {
   if (!declared_return_type_.has_value()) {
     builder_.CreateRetVoid();
@@ -1800,6 +1892,9 @@ void FunctionLoweringContext::LowerStatement(const Statement& statement) {
           },
           [this](const PrintStatement& print_statement) {
             LowerPrint(print_statement);
+          },
+          [this](const DeleteStatement& delete_statement) {
+            LowerDelete(delete_statement);
           },
           [this](const IfStatement& if_statement) {
             LowerIf(if_statement);

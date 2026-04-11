@@ -146,6 +146,49 @@ TEST(ResolverTests, ResolvesAssignmentTargetAndRhsIdentifierToInnerDeclaration) 
       inner_x_declaration);
 }
 
+TEST(ResolverTests, ResolvesDeleteTargetToPriorDeclaration) {
+  const std::string source =
+      "class Node { }\n"
+      "func main() { var node Node; delete node; }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+
+  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 2u);
+
+  const auto* node_declaration =
+      std::get_if<Parsing::DeclarationStatement>(&main_function->body->statements[0]->value);
+  ASSERT_NE(node_declaration, nullptr);
+
+  const auto* delete_statement =
+      std::get_if<Parsing::DeleteStatement>(&main_function->body->statements[1]->value);
+  ASSERT_NE(delete_statement, nullptr);
+
+  EXPECT_EQ(
+      resolver.GetUsedVarDef("node", &delete_statement->variable),
+      node_declaration);
+}
+
+TEST(ResolverTests, ThrowsOnDeleteBeforeLocalDefinition) {
+  const std::string source =
+      "class Node { }\n"
+      "func main() { delete node; var node Node; }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  EXPECT_THROW(
+      Parsing::BuildUseResolver(program, symbol_table),
+      std::runtime_error);
+}
+
 TEST(ResolverTests, ThrowsOnFunctionCallBeforeFunctionDefinitionInLocalScope) {
   const std::string source =
       "func main() { foo(); func foo() { } }\n";

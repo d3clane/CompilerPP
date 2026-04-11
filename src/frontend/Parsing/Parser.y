@@ -314,6 +314,7 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %token PRINT_KW "print"
 %token IF_KW "if"
 %token ELSE_KW "else"
+%token DELETE_KW "delete"
 
 %token ASSIGN "="
 %token AND_AND "&&"
@@ -355,6 +356,7 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %type <ClassDeclarationStatement> class_decl
 %type <AssignmentStatement> assign_stmt
 %type <PrintStatement> print_stmt
+%type <DeleteStatement> delete_stmt
 %type <IfStatement> if_stmt
 %type <ReturnStatement> return_stmt
 %type <Expression> expr_stmt
@@ -449,6 +451,9 @@ stmt:
       $$ = Statement{StatementVariant{std::move($1)}};
     }
   | print_stmt {
+      $$ = Statement{StatementVariant{std::move($1)}};
+    }
+  | delete_stmt {
       $$ = Statement{StatementVariant{std::move($1)}};
     }
   | if_stmt {
@@ -627,6 +632,12 @@ print_stmt:
     PRINT_KW LEFT_PAREN expr RIGHT_PAREN SEMICOLON {
       $$ = PrintStatement{
           std::make_unique<Expression>(std::move($3))};
+    }
+;
+
+delete_stmt:
+    DELETE_KW IDENT SEMICOLON {
+      $$ = DeleteStatement{IdentifierExpression{std::move($2)}};
     }
 ;
 
@@ -933,6 +944,9 @@ BisonParser::symbol_type yylex(ParserState& state) {
           },
           [&location](const Tokenizing::ElseKeyword&) -> BisonParser::symbol_type {
             return BisonParser::make_ELSE_KW(location);
+          },
+          [&location](const Tokenizing::DeleteKeyword&) -> BisonParser::symbol_type {
+            return BisonParser::make_DELETE_KW(location);
           },
           [&location](const Tokenizing::Assign&) -> BisonParser::symbol_type {
             return BisonParser::make_ASSIGN(location);

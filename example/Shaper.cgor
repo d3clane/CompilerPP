@@ -1,6 +1,6 @@
 class Shape {
-    var x int;
-    var y int;
+    var x int = 0;
+    var y int = 15;
 
     func InitShape(x_ int, y_ int) {
         x = x_;
@@ -40,7 +40,7 @@ class Circle : Shape {
 
 class Rectangle : Shape {
     var width int;
-    var height int;
+    var height int = 3;
 
     func InitRectangle(x_ int, y_ int, width_ int, height_ int) {
         InitShape(x_, y_);
@@ -138,4 +138,10 @@ func main() {
     }
 
     another_drawer(pretty);
+
+    delete shape;
+    delete circle;
+    delete rectangle;
+    delete pretty;
+    delete square;
 }

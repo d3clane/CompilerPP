@@ -128,6 +128,7 @@ IDENT_BODY [A-Za-z0-9_]
 "print"         { CREATE_TOKEN(PrintKeyword); }
 "if"            { CREATE_TOKEN(IfKeyword); }
 "else"          { CREATE_TOKEN(ElseKeyword); }
+"delete"        { CREATE_TOKEN(DeleteKeyword); }
 
 "=="            { CREATE_TOKEN(EqualEqual); }
 "!="            { CREATE_TOKEN(NotEqual); }

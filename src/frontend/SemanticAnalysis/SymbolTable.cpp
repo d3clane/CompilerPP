@@ -62,7 +62,6 @@ LocalSymbolTable& SymbolTable::CreateLocalTable(LocalSymbolTable* parent) {
 
 void SymbolTable::AddTable(const ASTNode* node, LocalSymbolTable& table) {
   table_by_node_[node] = &table;
-  owner_by_table_[&table] = node;
 }
 
 const LocalSymbolTable* SymbolTable::GetTable(const ASTNode* node) const {
@@ -72,15 +71,6 @@ const LocalSymbolTable* SymbolTable::GetTable(const ASTNode* node) const {
   }
 
   return table_it->second;
-}
-
-const ASTNode* SymbolTable::GetScopeOwner(const LocalSymbolTable* table) const {
-  const auto owner_it = owner_by_table_.find(table);
-  if (owner_it == owner_by_table_.end()) {
-    return nullptr;
-  }
-
-  return owner_it->second;
 }
 
 void SymbolTable::SetStatementNumerizer(StatementNumerizer numerizer) {
@@ -182,6 +172,9 @@ class SymbolTableBuilder {
             [this](const PrintStatement& print_statement) {
               VisitPrintStatement(print_statement);
             },
+            [this](const DeleteStatement& delete_statement) {
+              VisitDeleteStatement(delete_statement);
+            },
             [this](const IfStatement& if_statement) {
               VisitIfStatement(if_statement);
             },
@@ -279,6 +272,11 @@ class SymbolTableBuilder {
     RegisterNode(&print_statement);
     assert(print_statement.expr != nullptr);
     VisitExpression(*print_statement.expr);
+  }
+
+  void VisitDeleteStatement(const DeleteStatement& delete_statement) {
+    RegisterNode(&delete_statement);
+    RegisterNode(&delete_statement.variable);
   }
 
   void VisitIfStatement(const IfStatement& if_statement) {

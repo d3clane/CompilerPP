@@ -67,13 +67,11 @@ class SymbolTable {
   void AddTable(const ASTNode* node, LocalSymbolTable& table);
 
   const LocalSymbolTable* GetTable(const ASTNode* node) const;
-  const ASTNode* GetScopeOwner(const LocalSymbolTable* table) const;
   void SetStatementNumerizer(StatementNumerizer numerizer);
   const StatementNumerizer* GetStatementNumerizer() const;
 
  private:
   std::map<const ASTNode*, LocalSymbolTable*> table_by_node_;
-  std::map<const LocalSymbolTable*, const ASTNode*> owner_by_table_;
   std::vector<std::unique_ptr<LocalSymbolTable>> owned_tables_;
   std::unique_ptr<StatementNumerizer> statement_numerizer_;
 };

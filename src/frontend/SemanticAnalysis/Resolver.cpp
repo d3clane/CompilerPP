@@ -369,6 +369,9 @@ class UseResolverBuilder {
             [this](const PrintStatement& print_statement) {
               VisitPrintStatement(print_statement);
             },
+            [this](const DeleteStatement& delete_statement) {
+              VisitDeleteStatement(delete_statement);
+            },
             [this](const IfStatement& if_statement) {
               VisitIfStatement(if_statement);
             },
@@ -415,6 +418,10 @@ class UseResolverBuilder {
   void VisitPrintStatement(const PrintStatement& print_statement) {
     assert(print_statement.expr != nullptr);
     VisitExpression(*print_statement.expr);
+  }
+
+  void VisitDeleteStatement(const DeleteStatement& delete_statement) {
+    RegisterUse(&delete_statement.variable, delete_statement.variable.name);
   }
 
   void VisitIfStatement(const IfStatement& if_statement) {
