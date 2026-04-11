@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstddef>
 #include <map>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -35,6 +36,60 @@
 #include "llvm/Support/ErrorHandling.h"
 
 namespace Parsing {
+
+LLVMIRModule::LLVMIRModule(
+    std::unique_ptr<llvm::LLVMContext> context,
+    std::unique_ptr<llvm::Module> module)
+    : context_(std::move(context)),
+      module_(std::move(module)) {
+  assert(context_ != nullptr);
+  assert(module_ != nullptr);
+}
+
+LLVMIRModule::~LLVMIRModule() = default;
+
+LLVMIRModule::LLVMIRModule(LLVMIRModule&& other) noexcept = default;
+
+LLVMIRModule& LLVMIRModule::operator=(LLVMIRModule&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+
+  module_.reset();
+  context_.reset();
+  context_ = std::move(other.context_);
+  module_ = std::move(other.module_);
+  return *this;
+}
+
+llvm::LLVMContext& LLVMIRModule::GetContext() {
+  assert(context_ != nullptr);
+  return *context_;
+}
+
+const llvm::LLVMContext& LLVMIRModule::GetContext() const {
+  assert(context_ != nullptr);
+  return *context_;
+}
+
+llvm::Module& LLVMIRModule::GetModule() {
+  assert(module_ != nullptr);
+  return *module_;
+}
+
+const llvm::Module& LLVMIRModule::GetModule() const {
+  assert(module_ != nullptr);
+  return *module_;
+}
+
+std::string LLVMIRModule::ToString() const {
+  assert(module_ != nullptr);
+
+  std::string ir;
+  llvm::raw_string_ostream stream(ir);
+  module_->print(stream, nullptr);
+  return stream.str();
+}
 
 namespace {
 
@@ -428,10 +483,28 @@ class LLVMModuleBuilder {
       : use_resolver_(use_resolver),
         type_definer_(type_definer),
         state_(std::move(state)),
-        module_("CompilerPP", context_),
+        context_storage_(std::make_unique<llvm::LLVMContext>()),
+        module_storage_(
+            std::make_unique<llvm::Module>("CompilerPP", *context_storage_)),
+        context_(*context_storage_),
+        module_(*module_storage_),
         llvm_utils_(context_, module_) {}
 
-  std::string BuildIR() {
+  LLVMIRModule BuildLLVMModule() {
+    BuildModule();
+    return LLVMIRModule(
+        std::move(context_storage_),
+        std::move(module_storage_));
+  }
+
+ private:
+  friend class FunctionLoweringContext;
+
+  void BuildModule() {
+    if (module_built_) {
+      return;
+    }
+
     DeclareRuntimeSupport();
     CreateClassTypes();
     CreateGlobalDeclarations();
@@ -443,15 +516,8 @@ class LLVMModuleBuilder {
     DefineGlobalInitFunction();
     DefineMainWrapper();
     VerifyModule();
-
-    std::string ir;
-    llvm::raw_string_ostream stream(ir);
-    module_.print(stream, nullptr);
-    return stream.str();
+    module_built_ = true;
   }
-
- private:
-  friend class FunctionLoweringContext;
 
   struct LLVMClassData {
     llvm::StructType* type = nullptr;
@@ -830,9 +896,12 @@ class LLVMModuleBuilder {
   const TypeDefiner& type_definer_;
   PreparedState state_;
 
-  mutable llvm::LLVMContext context_;
-  llvm::Module module_;
+  std::unique_ptr<llvm::LLVMContext> context_storage_;
+  std::unique_ptr<llvm::Module> module_storage_;
+  llvm::LLVMContext& context_;
+  llvm::Module& module_;
   LLVMConstructUtils llvm_utils_;
+  bool module_built_ = false;
   std::map<const ClassDeclarationStatement*, LLVMClassData> llvm_class_data_by_decl_;
   std::map<const FunctionDeclarationStatement*, llvm::Function*> llvm_function_by_decl_;
   std::map<const DeclarationStatement*, llvm::GlobalVariable*> llvm_global_by_decl_;
@@ -1964,7 +2033,7 @@ void FunctionLoweringContext::EmitClassDefaultInitializers(
 
 }  // namespace
 
-std::string LowerToLLVMIR(
+LLVMIRModule LowerToLLVMIRModule(
     const Program& program,
     const UseResolver& use_resolver,
     const TypeDefiner& type_definer) {
@@ -1975,7 +2044,14 @@ std::string LowerToLLVMIR(
       use_resolver,
       type_definer,
       std::move(state));
-  return lowering_builder.BuildIR();
+  return lowering_builder.BuildLLVMModule();
+}
+
+std::string LowerToLLVMIR(
+    const Program& program,
+    const UseResolver& use_resolver,
+    const TypeDefiner& type_definer) {
+  return LowerToLLVMIRModule(program, use_resolver, type_definer).ToString();
 }
 
 }  // namespace Parsing

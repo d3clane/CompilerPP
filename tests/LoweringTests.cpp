@@ -1,9 +1,11 @@
+#include <filesystem>
 #include <regex>
 #include <string>
 
 #include <gtest/gtest.h>
 
 #include "Lowering/LLVMIRLowering.hpp"
+#include "Lowering/ObjectFileLowering.hpp"
 #include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
@@ -22,6 +24,21 @@ std::string LowerSource(const std::string& source) {
   Parsing::CheckAccessAllowance(program, resolver, type_definer);
   Parsing::CheckTypes(program, resolver, type_definer);
   return Parsing::LowerToLLVMIR(program, resolver, type_definer);
+}
+
+void LowerSourceToObjectFile(
+    const std::string& source,
+    const std::filesystem::path& output_path) {
+  const Parsing::Program program = Parsing::ParseSource(source);
+  const Parsing::TypeDefiner type_definer = Parsing::BuildTypeDefiner(program);
+  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Parsing::UseResolver resolver =
+      Parsing::BuildUseResolver(program, symbol_table);
+  Parsing::CheckAccessAllowance(program, resolver, type_definer);
+  Parsing::CheckTypes(program, resolver, type_definer);
+  Parsing::LLVMIRModule llvm_ir =
+      Parsing::LowerToLLVMIRModule(program, resolver, type_definer);
+  Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
 }
 
 TEST(LoweringTests, LowersDerivedLayoutWithEmbeddedBaseAndAllocator) {
@@ -170,6 +187,20 @@ TEST(LoweringTests, KeepsNestedFunctionMangledWhileGlobalFunctionStaysPlain) {
   EXPECT_TRUE(std::regex_search(
       ir,
       std::regex(R"(call i32 @Helper__[0-9_]+\(\))")));
+}
+
+TEST(LoweringTests, EmitsNativeObjectFile) {
+  const std::string source =
+      "func main() int { return 0; }\n";
+  const std::filesystem::path output_path =
+      std::filesystem::temp_directory_path() / "compilerpp_lowering_test.o";
+  std::filesystem::remove(output_path);
+
+  LowerSourceToObjectFile(source, output_path);
+
+  ASSERT_TRUE(std::filesystem::exists(output_path));
+  EXPECT_GT(std::filesystem::file_size(output_path), 0u);
+  std::filesystem::remove(output_path);
 }
 
 }  // namespace

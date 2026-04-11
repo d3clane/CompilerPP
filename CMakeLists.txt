@@ -15,10 +15,17 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 execute_process(
-  COMMAND "${LLVM_CONFIG_EXE}" --libfiles core
-  OUTPUT_VARIABLE LLVM_CORE_LIB
+  COMMAND "${LLVM_CONFIG_EXE}" --libfiles core nativecodegen target targetparser mc mcparser asmparser asmprinter passes support
+  OUTPUT_VARIABLE LLVM_LIBS
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+execute_process(
+  COMMAND "${LLVM_CONFIG_EXE}" --system-libs
+  OUTPUT_VARIABLE LLVM_SYSTEM_LIBS
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+separate_arguments(LLVM_LIBS UNIX_COMMAND "${LLVM_LIBS}")
+separate_arguments(LLVM_SYSTEM_LIBS UNIX_COMMAND "${LLVM_SYSTEM_LIBS}")
 
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${GENERATED_DIR}")
@@ -47,6 +54,7 @@ add_library(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Types.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMConstructUtils.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMIRLowering.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/ObjectFileLowering.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Utils/ClassMemberLookup.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Printer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
@@ -74,7 +82,8 @@ target_include_directories(
 target_link_libraries(
   compiler_frontend
   PRIVATE
-    "${LLVM_CORE_LIB}"
+    ${LLVM_LIBS}
+    ${LLVM_SYSTEM_LIBS}
 )
 
 target_compile_features(compiler_frontend PUBLIC cxx_std_20)

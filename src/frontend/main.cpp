@@ -1,4 +1,5 @@
 #include <fstream>
+#include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <optional>
@@ -8,6 +9,7 @@
 
 #include "Debug/DebugCtx.hpp"
 #include "Lowering/LLVMIRLowering.hpp"
+#include "Lowering/ObjectFileLowering.hpp"
 #include "Parsing/Parser.hpp"
 #include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
@@ -18,12 +20,20 @@
 #include "Tokenizing/Lexer.hpp"
 
 int main(int argc, char* argv[]) {
-  if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " <input-file>\n";
+  if (argc < 2 || argc > 3) {
+    std::cerr << "Usage: " << argv[0] << " <input-file> [output-object-file]\n";
     return 1;
   }
 
   const std::string input_path = argv[1];
+  std::filesystem::path output_path;
+  if (argc == 3) {
+    output_path = argv[2];
+  } else {
+    output_path = input_path;
+    output_path.replace_extension(".o");
+  }
+
   std::ifstream input_stream(input_path);
   if (!input_stream) {
     std::cerr << "Failed to open input file: " << input_path << "\n";
@@ -80,11 +90,11 @@ int main(int argc, char* argv[]) {
       debug_ctx->GetErrors().ThrowErrors();
     }
 
-    const std::string llvm_ir = Parsing::LowerToLLVMIR(
+    Parsing::LLVMIRModule llvm_ir = Parsing::LowerToLLVMIRModule(
         program,
         use_resolver,
         type_definer);
-    std::cout << llvm_ir;
+    Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
   } catch (const std::exception& error) {
     if (debug_ctx.has_value() && debug_ctx->GetErrors().HasErrors()) {
       try {
