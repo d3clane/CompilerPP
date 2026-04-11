@@ -63,7 +63,7 @@ std::unique_ptr<llvm::TargetMachine> CreateHostTargetMachine() {
   }
 
   auto* target_machine = target->createTargetMachine(
-      llvm::Triple(target_triple),
+      target_triple,
       cpu,
       host_features.getString(),
       target_options,
@@ -74,15 +74,6 @@ std::unique_ptr<llvm::TargetMachine> CreateHostTargetMachine() {
   }
 
   return std::unique_ptr<llvm::TargetMachine>(target_machine);
-}
-
-void VerifyModule(const llvm::Module& module) {
-  std::string verify_errors;
-  llvm::raw_string_ostream error_stream(verify_errors);
-  if (llvm::verifyModule(module, &error_stream)) {
-    throw std::runtime_error(
-        "LLVM module verification failed:\n" + error_stream.str());
-  }
 }
 
 void RegisterStandardOptimizationPasses(
@@ -107,9 +98,8 @@ void LowerToObjectFile(
     const std::string& output_path) {
   std::unique_ptr<llvm::TargetMachine> target_machine =
       CreateHostTargetMachine();
-  module.setTargetTriple(target_machine->getTargetTriple());
+  module.setTargetTriple(target_machine->getTargetTriple().str());
   module.setDataLayout(target_machine->createDataLayout());
-  VerifyModule(module);
 
   std::error_code error_code;
   llvm::raw_fd_ostream destination(

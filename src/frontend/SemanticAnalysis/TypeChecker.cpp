@@ -533,52 +533,6 @@ class TypeCheckerVisitor {
     VisitStatements(block.statements);
   }
 
-  std::optional<Type> EvaluateExpressionType(const Expression& expression) {
-    if (recovering_from_error_) {
-      return std::nullopt;
-    }
-
-    return std::visit(
-        Utils::Overload{
-            [this](const IdentifierExpression& identifier_expression)
-                -> std::optional<Type> {
-              const UseResolver::ResolvedSymbol* resolved_symbol = ResolveUsedSymbol(
-                  identifier_expression.name,
-                  &identifier_expression,
-                  "Identifier");
-              return resolved_symbol->symbol_data.type;
-            },
-            [](const LiteralExpression& literal_expression) -> std::optional<Type> {
-              return std::visit(
-                  Utils::Overload{
-                      [](int) -> std::optional<Type> {
-                        return Type{IntType{}};
-                      },
-                      [](bool) -> std::optional<Type> {
-                        return Type{BoolType{}};
-                      }},
-                  literal_expression.value);
-            },
-            [this](const FunctionCall& function_call) -> std::optional<Type> {
-              return EvaluateFunctionCallType(function_call);
-            },
-            [this](const FieldAccess& field_access) -> std::optional<Type> {
-              return EvaluateFieldAccessType(field_access);
-            },
-            [this](const MethodCall& method_call) -> std::optional<Type> {
-              return EvaluateMethodCallType(method_call);
-            },
-            [this]<UnaryExpressionNode Node>(const Node& unary_expression)
-                -> std::optional<Type> {
-              return EvaluateUnaryExpressionType(unary_expression);
-            },
-            [this]<BinaryExpressionNode Node>(const Node& binary_expression)
-                -> std::optional<Type> {
-              return EvaluateBinaryExpressionType(binary_expression);
-            }},
-        expression.value);
-  }
-
   template <UnaryExpressionNode Node>
   std::optional<Type> EvaluateUnaryExpressionType(const Node& unary_expression) {
     assert(unary_expression.operand != nullptr);
@@ -643,6 +597,52 @@ class TypeCheckerVisitor {
     }
 
     return left_type;
+  }
+
+  std::optional<Type> EvaluateExpressionType(const Expression& expression) {
+    if (recovering_from_error_) {
+      return std::nullopt;
+    }
+
+    return std::visit(
+        Utils::Overload{
+            [this](const IdentifierExpression& identifier_expression)
+                -> std::optional<Type> {
+              const UseResolver::ResolvedSymbol* resolved_symbol = ResolveUsedSymbol(
+                  identifier_expression.name,
+                  &identifier_expression,
+                  "Identifier");
+              return resolved_symbol->symbol_data.type;
+            },
+            [](const LiteralExpression& literal_expression) -> std::optional<Type> {
+              return std::visit(
+                  Utils::Overload{
+                      [](int) -> std::optional<Type> {
+                        return Type{IntType{}};
+                      },
+                      [](bool) -> std::optional<Type> {
+                        return Type{BoolType{}};
+                      }},
+                  literal_expression.value);
+            },
+            [this](const FunctionCall& function_call) -> std::optional<Type> {
+              return EvaluateFunctionCallType(function_call);
+            },
+            [this](const FieldAccess& field_access) -> std::optional<Type> {
+              return EvaluateFieldAccessType(field_access);
+            },
+            [this](const MethodCall& method_call) -> std::optional<Type> {
+              return EvaluateMethodCallType(method_call);
+            },
+            [this]<UnaryExpressionNode Node>(const Node& unary_expression)
+                -> std::optional<Type> {
+              return EvaluateUnaryExpressionType(unary_expression);
+            },
+            [this]<BinaryExpressionNode Node>(const Node& binary_expression)
+                -> std::optional<Type> {
+              return EvaluateBinaryExpressionType(binary_expression);
+            }},
+        expression.value);
   }
 
 

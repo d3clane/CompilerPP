@@ -8,12 +8,34 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(BISON 3.8 REQUIRED)
 find_package(FLEX REQUIRED)
+if(NOT DEFINED LLVM_CONFIG_EXE)
+  foreach(LLVM_MAJOR_CANDIDATE 21 20 19)
+    set(LLVM_CONFIG_CANDIDATE "/opt/homebrew/opt/llvm@${LLVM_MAJOR_CANDIDATE}/bin/llvm-config")
+    if(EXISTS "${LLVM_CONFIG_CANDIDATE}" AND EXISTS "/opt/homebrew/opt/lld@${LLVM_MAJOR_CANDIDATE}/lib/cmake/lld/LLDConfig.cmake")
+      set(LLVM_CONFIG_EXE "${LLVM_CONFIG_CANDIDATE}" CACHE FILEPATH "Path to llvm-config")
+      break()
+    endif()
+  endforeach()
+endif()
+
 find_program(LLVM_CONFIG_EXE NAMES llvm-config REQUIRED)
 execute_process(
   COMMAND "${LLVM_CONFIG_EXE}" --includedir
   OUTPUT_VARIABLE LLVM_INCLUDE_DIR
   OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+execute_process(
+  COMMAND "${LLVM_CONFIG_EXE}" --prefix
+  OUTPUT_VARIABLE LLVM_PREFIX
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+  COMMAND "${LLVM_CONFIG_EXE}" --version
+  OUTPUT_VARIABLE LLVM_VERSION
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+string(REGEX MATCH "^[0-9]+" LLVM_VERSION_MAJOR "${LLVM_VERSION}")
+set(LLVM_DIR "${LLVM_PREFIX}/lib/cmake/llvm" CACHE PATH "LLVM CMake package directory" FORCE)
 execute_process(
   COMMAND "${LLVM_CONFIG_EXE}" --libfiles core nativecodegen target targetparser mc mcparser asmparser asmprinter passes support
   OUTPUT_VARIABLE LLVM_LIBS
@@ -26,6 +48,13 @@ execute_process(
 )
 separate_arguments(LLVM_LIBS UNIX_COMMAND "${LLVM_LIBS}")
 separate_arguments(LLVM_SYSTEM_LIBS UNIX_COMMAND "${LLVM_SYSTEM_LIBS}")
+
+find_package(
+  LLD ${LLVM_VERSION} EXACT CONFIG REQUIRED
+  HINTS
+    "${LLVM_PREFIX}"
+    "/opt/homebrew/opt/lld@${LLVM_VERSION_MAJOR}"
+)
 
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY "${GENERATED_DIR}")
@@ -78,6 +107,7 @@ target_include_directories(
     "${GENERATED_DIR}"
   PRIVATE
     "${LLVM_INCLUDE_DIR}"
+    "${LLD_INCLUDE_DIRS}"
 )
 
 target_link_libraries(
@@ -85,6 +115,8 @@ target_link_libraries(
   PRIVATE
     ${LLVM_LIBS}
     ${LLVM_SYSTEM_LIBS}
+    lldMachO
+    lldCommon
 )
 
 target_compile_features(compiler_frontend PUBLIC cxx_std_20)
