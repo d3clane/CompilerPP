@@ -13,12 +13,6 @@ namespace Parsing {
 
 class DebugCtx;
 
-struct SymbolDebugInfo {
-  std::string context;
-
-  friend bool operator==(const SymbolDebugInfo& left, const SymbolDebugInfo& right) = default;
-};
-
 enum class SymbolKind {
   Variable,
   Function,
@@ -27,13 +21,21 @@ enum class SymbolKind {
 };
 
 struct SymbolData {
-  Type type;
-  std::string name;
-  bool is_mutable;
-  SymbolDebugInfo debug_info;
-  const ASTNode* declaration_node;
+  const Type* type = nullptr;
   StatementNumerizer::ScopedStmtRef declaration_ref;
   SymbolKind kind;
+
+  const ASTNode* GetDeclarationNode() const;
+
+  static SymbolData CreateVariableSymbolData(
+      const DeclarationStatement& declaration,
+      StatementNumerizer::ScopedStmtRef declaration_ref);
+  static SymbolData CreateFunctionSymbolData(
+      const FunctionDeclarationStatement& function_declaration,
+      StatementNumerizer::ScopedStmtRef declaration_ref);
+  static SymbolData CreateParameterSymbolData(
+      const FunctionParameter& parameter,
+      StatementNumerizer::ScopedStmtRef declaration_ref);
 
   static bool CanBeShadowed(const SymbolData& symbol_data) {
     return symbol_data.kind != SymbolKind::Function &&
@@ -50,7 +52,7 @@ class LocalSymbolTable {
   explicit LocalSymbolTable(LocalSymbolTable* parent);
 
   const SymbolData* GetSymbolInfoInLocalScope(const std::string& name) const;
-  ErrorMsg AddSymbolInfo(SymbolData symbol_data);
+  ErrorMsg AddSymbolInfo(const std::string& name, SymbolData symbol_data);
   LocalSymbolTable* GetParent() const;
 
  private:
@@ -65,13 +67,20 @@ class SymbolTable {
   LocalSymbolTable& CreateLocalTable(LocalSymbolTable* parent);
 
   void AddTable(const ASTNode* node, LocalSymbolTable& table);
+  void SetScopeOwner(const ASTNode* owner, LocalSymbolTable& table);
 
   const LocalSymbolTable* GetTable(const ASTNode* node) const;
+  const ASTNode* GetScopeOwner(const LocalSymbolTable* table) const;
+  const ClassDeclarationStatement* GetIfClassDeclarationOwner(
+      const LocalSymbolTable* table) const;
+  const FunctionDeclarationStatement* GetIfFunctionDeclarationOwner(
+      const LocalSymbolTable* table) const;
   void SetStatementNumerizer(StatementNumerizer numerizer);
   const StatementNumerizer* GetStatementNumerizer() const;
 
  private:
   std::map<const ASTNode*, LocalSymbolTable*> table_by_node_;
+  std::map<const LocalSymbolTable*, const ASTNode*> scope_owner_by_table_;
   std::vector<std::unique_ptr<LocalSymbolTable>> owned_tables_;
   std::unique_ptr<StatementNumerizer> statement_numerizer_;
 };

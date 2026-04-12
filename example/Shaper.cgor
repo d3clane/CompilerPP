@@ -137,7 +137,7 @@ func main() {
         shape.draw();
     }
 
-    another_drawer(pretty);
+    another_drawer(shape : pretty);
 
     delete shape;
     delete circle;

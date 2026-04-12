@@ -5,6 +5,7 @@
 #include <variant>
 
 #include "Debug/DebugCtx.hpp"
+#include "Utils/ClassMemberLookup.hpp"
 #include "Utils/Overload.hpp"
 
 namespace Parsing {
@@ -16,7 +17,6 @@ class AccessAllowanceCheckerVisitor {
   AccessAllowanceCheckerVisitor(
       const Program& program,
       const UseResolver& use_resolver,
-      const TypeDefiner&,
       DebugCtx& debug_ctx)
       : program_(program),
         use_resolver_(use_resolver),
@@ -31,31 +31,31 @@ class AccessAllowanceCheckerVisitor {
     debug_ctx_.GetErrors().AddError(node, message);
   }
 
-  const UseResolver::ResolvedSymbol& ResolveFieldSymbolOrThrow(
-      const FieldAccess& field_access) const {
-    const UseResolver::ResolvedSymbol* resolved_symbol =
-        use_resolver_.GetResolvedSymbol(
-            field_access.field_name.name,
-            &field_access.field_name);
-    if (resolved_symbol == nullptr) {
-      throw std::runtime_error("resolver is incorrect for this program");
-    }
-
-    if (resolved_symbol->symbol_data.kind != SymbolKind::Variable) {
-      throw std::runtime_error("resolver is incorrect for this program");
-    }
-
-    return *resolved_symbol;
-  }
-
   void CheckFieldAccess(const FieldAccess& field_access) {
-    const UseResolver::ResolvedSymbol& resolved_field =
-        ResolveFieldSymbolOrThrow(field_access);
-    const ClassDeclarationStatement* field_owner_class =
-        resolved_field.declaring_class;
-    if (field_owner_class == nullptr) {
+    const UseResolver::ResolvedSymbol* resolved_receiver =
+        use_resolver_.GetResolvedSymbol(
+            field_access.object_name.name,
+            &field_access.object_name);
+    if (resolved_receiver == nullptr) {
       throw std::runtime_error("resolver is incorrect for this program");
     }
+
+    const ClassType* receiver_class_type = AsClassType(resolved_receiver->symbol_data.type);
+    if (receiver_class_type == nullptr) {
+      return;
+    }
+
+    const std::optional<ClassMemberLookupResult> resolved_field = LookupClassMember(
+        *receiver_class_type,
+        field_access.field_name.name,
+        ClassMemberSearchMode::CurrentClassOnly);
+    if (!resolved_field.has_value() ||
+        resolved_field->kind != ClassMemberKind::Field ||
+        resolved_field->declaring_class == nullptr) {
+      return;
+    }
+
+    const ClassDeclarationStatement* field_owner_class = resolved_field->declaring_class;
 
     if (current_method_owner_class_ == nullptr) {
       ReportCodeError(
@@ -230,25 +230,21 @@ class AccessAllowanceCheckerVisitor {
 void CheckAccessAllowance(
     const Program& program,
     const UseResolver& use_resolver,
-    const TypeDefiner& type_definer,
     DebugCtx& debug_ctx) {
   AccessAllowanceCheckerVisitor visitor(
       program,
       use_resolver,
-      type_definer,
       debug_ctx);
   visitor.Check();
 }
 
 void CheckAccessAllowance(
     const Program& program,
-    const UseResolver& use_resolver,
-    const TypeDefiner& type_definer) {
+    const UseResolver& use_resolver) {
   DebugCtx debug_ctx;
   CheckAccessAllowance(
       program,
       use_resolver,
-      type_definer,
       debug_ctx);
   if (debug_ctx.GetErrors().HasErrors()) {
     debug_ctx.GetErrors().ThrowErrors();

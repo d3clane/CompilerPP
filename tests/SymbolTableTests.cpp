@@ -55,12 +55,12 @@ TEST(SymbolTableTests, BuildsScopesWithoutUseResolutionChecks) {
 
   const Parsing::SymbolData* root_x = FindVisibleSymbol(symbol_table, "x", &program);
   ASSERT_NE(root_x, nullptr);
-  EXPECT_EQ(root_x->declaration_node, outer_x_declaration);
+  EXPECT_EQ(root_x->GetDeclarationNode(), outer_x_declaration);
 
   const Parsing::SymbolData* block_x =
       FindVisibleSymbol(symbol_table, "x", main_function->body.get());
   ASSERT_NE(block_x, nullptr);
-  EXPECT_EQ(block_x->declaration_node, inner_x_declaration);
+  EXPECT_EQ(block_x->GetDeclarationNode(), inner_x_declaration);
 }
 
 TEST(SymbolTableTests, ThrowsOnDuplicateDeclarationInSameScope) {
@@ -130,8 +130,7 @@ TEST(SymbolTableTests, ResolvesIdentifierLookupThroughParentScope) {
   const Parsing::SymbolData* visible_x =
       FindVisibleSymbol(symbol_table, "x", main_function->body.get());
   ASSERT_NE(visible_x, nullptr);
-  EXPECT_EQ(visible_x->name, "x");
-  EXPECT_EQ(visible_x->declaration_node, outer_x_declaration);
+  EXPECT_EQ(visible_x->GetDeclarationNode(), outer_x_declaration);
 }
 
 TEST(SymbolTableTests, StoresInScopeStatementIdForDeclarations) {
@@ -173,9 +172,96 @@ TEST(SymbolTableTests, StoresClassTypedVariables) {
   const Parsing::SymbolData* root_symbol = FindVisibleSymbol(symbol_table, "root", &program);
   ASSERT_NE(root_symbol, nullptr);
   EXPECT_EQ(root_symbol->kind, Parsing::SymbolKind::Variable);
-  const auto* class_type = std::get_if<Parsing::ClassType>(&root_symbol->type.type);
+  const auto* class_type = Parsing::AsClassType(root_symbol->type);
   ASSERT_NE(class_type, nullptr);
-  EXPECT_EQ(class_type->class_name, "Node");
+  ASSERT_NE(class_type->parent, nullptr);
+  EXPECT_EQ(class_type->parent->class_name.name, "Node");
+}
+
+TEST(SymbolTableTests, ReturnsClassDeclarationOwnerForClassScope) {
+  const std::string source =
+      "class Node { var value int; }\n"
+      "func main() { var x int; }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  const Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+
+  ASSERT_EQ(program.top_statements.size(), 2u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  ASSERT_NE(program.top_statements[1], nullptr);
+  const auto* class_declaration =
+      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(class_declaration, nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+
+  const Parsing::LocalSymbolTable* class_scope = symbol_table.GetTable(class_declaration);
+  ASSERT_NE(class_scope, nullptr);
+  EXPECT_EQ(symbol_table.GetIfClassDeclarationOwner(class_scope), class_declaration);
+
+  const Parsing::LocalSymbolTable* main_scope = symbol_table.GetTable(main_function->body.get());
+  ASSERT_NE(main_scope, nullptr);
+  EXPECT_EQ(symbol_table.GetIfClassDeclarationOwner(main_scope), nullptr);
+}
+
+TEST(SymbolTableTests, ReturnsFunctionDeclarationOwnerForFunctionBodyScope) {
+  const std::string source =
+      "func main() { var x int; }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  const Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+
+  ASSERT_EQ(program.top_statements.size(), 1u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+
+  const Parsing::LocalSymbolTable* main_scope = symbol_table.GetTable(main_function->body.get());
+  ASSERT_NE(main_scope, nullptr);
+  EXPECT_EQ(symbol_table.GetIfFunctionDeclarationOwner(main_scope), main_function);
+  EXPECT_EQ(symbol_table.GetScopeOwner(main_scope), static_cast<const Parsing::ASTNode*>(main_function));
+}
+
+TEST(SymbolTableTests, ReturnsIfAndElseOwnersForBranchScopes) {
+  const std::string source =
+      "func main() { if true { var x int; } else { var y int; } }\n";
+
+  const Parsing::Program program = Parsing::ParseSource(source);
+  const Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+
+  ASSERT_EQ(program.top_statements.size(), 1u);
+  ASSERT_NE(program.top_statements[0], nullptr);
+  const auto* main_function =
+      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+  ASSERT_NE(main_function, nullptr);
+  ASSERT_NE(main_function->body, nullptr);
+  ASSERT_EQ(main_function->body->statements.size(), 1u);
+  ASSERT_NE(main_function->body->statements[0], nullptr);
+
+  const auto* if_statement =
+      std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
+  ASSERT_NE(if_statement, nullptr);
+  ASSERT_NE(if_statement->true_block, nullptr);
+  ASSERT_NE(if_statement->else_tail, nullptr);
+  ASSERT_NE(if_statement->else_tail->else_block, nullptr);
+
+  const Parsing::LocalSymbolTable* true_scope =
+      symbol_table.GetTable(if_statement->true_block.get());
+  ASSERT_NE(true_scope, nullptr);
+  EXPECT_EQ(
+      dynamic_cast<const Parsing::IfStatement*>(symbol_table.GetScopeOwner(true_scope)),
+      if_statement);
+
+  const Parsing::LocalSymbolTable* else_scope =
+      symbol_table.GetTable(if_statement->else_tail->else_block.get());
+  ASSERT_NE(else_scope, nullptr);
+  EXPECT_EQ(
+      dynamic_cast<const Parsing::ElseTail*>(symbol_table.GetScopeOwner(else_scope)),
+      if_statement->else_tail.get());
 }
 
 TEST(SymbolTableTests, AllowsShadowingClassName) {
@@ -294,7 +380,7 @@ TEST(SymbolTableTests, DerivedClassMethodKeepsLocalOverride) {
   const Parsing::SymbolData* ping_symbol =
       derived_scope->GetSymbolInfoInLocalScope("ping");
   ASSERT_NE(ping_symbol, nullptr);
-  EXPECT_EQ(ping_symbol->declaration_node, &derived_class->methods[0]);
+  EXPECT_EQ(ping_symbol->GetDeclarationNode(), &derived_class->methods[0]);
 }
 
 TEST(SymbolTableTests, AllowsDerivedClassToRedefineInheritedField) {
@@ -317,7 +403,7 @@ TEST(SymbolTableTests, AllowsDerivedClassToRedefineInheritedField) {
   const Parsing::SymbolData* x_symbol =
       derived_scope->GetSymbolInfoInLocalScope("x");
   ASSERT_NE(x_symbol, nullptr);
-  EXPECT_EQ(x_symbol->declaration_node, &derived_class->fields[0]);
+  EXPECT_EQ(x_symbol->GetDeclarationNode(), &derived_class->fields[0]);
 }
 
 TEST(SymbolTableTests, SupportsInheritanceWhenBaseDeclaredAfterDerived) {
@@ -371,7 +457,7 @@ TEST(SymbolTableTests, SupportsMethodOverrideWhenBaseDeclaredAfterDerived) {
   const Parsing::SymbolData* method_symbol =
       derived_scope->GetSymbolInfoInLocalScope("ping");
   ASSERT_NE(method_symbol, nullptr);
-  EXPECT_EQ(method_symbol->declaration_node, &derived_class->methods[0]);
+  EXPECT_EQ(method_symbol->GetDeclarationNode(), &derived_class->methods[0]);
 }
 
 TEST(SymbolTableTests, KeepsMostDerivedMethodDeclarationAcrossInheritanceChain) {
@@ -402,7 +488,7 @@ TEST(SymbolTableTests, KeepsMostDerivedMethodDeclarationAcrossInheritanceChain) 
   const Parsing::SymbolData* method_symbol =
       derived_scope->GetSymbolInfoInLocalScope("ping");
   ASSERT_NE(method_symbol, nullptr);
-  EXPECT_EQ(method_symbol->declaration_node, &derived_class->methods[0]);
+  EXPECT_EQ(method_symbol->GetDeclarationNode(), &derived_class->methods[0]);
 }
 
 }  // namespace

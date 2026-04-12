@@ -12,9 +12,7 @@ class_field_decl = var_decl ;
 # methods are always after fields in class body
 class_method_decl = func_decl ;
 
-var_decl = "var" mutable_opt ident type init_opt ";" ;
-
-mutable_opt = "mutable" | \eps ;
+var_decl = "var" ident type init_opt ";" ;
 
 init_opt = "=" expr | \eps ;
 
@@ -28,11 +26,9 @@ param = ident type ;
 
 return_type_opt = type | \eps ;
 
-type = base_type array_suffix_opt ;
+type = base_type ;
 
 base_type = "int" | "bool" | ident ;
-
-array_suffix_opt = "[" "]" | \eps ;
 
 assign_stmt = ident "=" expr ";" ;
 

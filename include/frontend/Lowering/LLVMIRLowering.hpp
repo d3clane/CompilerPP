@@ -12,7 +12,6 @@ class Module;
 
 namespace Parsing {
 
-class TypeDefiner;
 class UseResolver;
 
 class LLVMIRModule {
@@ -41,12 +40,10 @@ class LLVMIRModule {
 
 LLVMIRModule LowerToLLVMIRModule(
     const Program& program,
-    const UseResolver& use_resolver,
-    const TypeDefiner& type_definer);
+    const UseResolver& use_resolver);
 
 std::string LowerToLLVMIR(
     const Program& program,
-    const UseResolver& use_resolver,
-    const TypeDefiner& type_definer);
+    const UseResolver& use_resolver);
 
 }  // namespace Parsing

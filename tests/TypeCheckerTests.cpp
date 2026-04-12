@@ -7,7 +7,6 @@
 #include "SemanticAnalysis/Resolver.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "SemanticAnalysis/TypeChecker.hpp"
-#include "SemanticAnalysis/TypeDefiner.hpp"
 #include "TestParseUtils.hpp"
 
 namespace {
@@ -23,26 +22,24 @@ static_assert(
 
 void ExpectTypeCheckPass(const std::string& source) {
   const Parsing::Program program = Parsing::ParseSource(source);
-  const Parsing::TypeDefiner type_definer = Parsing::BuildTypeDefiner(program);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   const Parsing::UseResolver resolver =
       Parsing::BuildUseResolver(program, symbol_table);
   EXPECT_NO_THROW(
-      Parsing::CheckAccessAllowance(program, resolver, type_definer));
+      Parsing::CheckAccessAllowance(program, resolver));
   EXPECT_NO_THROW(
-      Parsing::CheckTypes(program, resolver, type_definer));
+      Parsing::CheckTypes(program, resolver));
 }
 
 void ExpectTypeCheckFail(const std::string& source) {
   const Parsing::Program program = Parsing::ParseSource(source);
-  const Parsing::TypeDefiner type_definer = Parsing::BuildTypeDefiner(program);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   EXPECT_THROW(
       {
         const Parsing::UseResolver resolver =
             Parsing::BuildUseResolver(program, symbol_table);
-        Parsing::CheckAccessAllowance(program, resolver, type_definer);
-        Parsing::CheckTypes(program, resolver, type_definer);
+        Parsing::CheckAccessAllowance(program, resolver);
+        Parsing::CheckTypes(program, resolver);
       },
       std::runtime_error);
 }
@@ -157,13 +154,12 @@ TEST(TypeCheckerTests, RejectsNamedFunctionCallArgumentTypeMismatch) {
   ExpectTypeCheckFail(source);
 }
 
-TEST(TypeCheckerTests, AcceptsClassAndArrayTypes) {
+TEST(TypeCheckerTests, AcceptsClassTypes) {
   const std::string source =
       "class Node { var value int; }\n"
       "class Derived:Node { var next Node; }\n"
       "var root Node;\n"
-      "var storage int[];\n"
-      "func main() { var local Node = root; var local_arr int[] = storage; }\n";
+      "func main() { var local Node = root; }\n";
 
   ExpectTypeCheckPass(source);
 }

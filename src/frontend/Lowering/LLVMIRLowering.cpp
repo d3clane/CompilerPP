@@ -30,7 +30,7 @@
 #include "SemanticAnalysis/GlobalRelations.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
 #include "SemanticAnalysis/StatementNumerizer.hpp"
-#include "SemanticAnalysis/TypeDefiner.hpp"
+#include "Utils/ClassMemberLookup.hpp"
 #include "Utils/Overload.hpp"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -110,6 +110,16 @@ std::string JoinStrings(
   return result;
 }
 
+const Type* GetBuiltinIntType() {
+  static const Type kIntType{IntType{}};
+  return &kIntType;
+}
+
+const Type* GetBuiltinBoolType() {
+  static const Type kBoolType{BoolType{}};
+  return &kBoolType;
+}
+
 class NodeNameBuilder {
  public:
   explicit NodeNameBuilder(const StatementNumerizer& numerizer)
@@ -118,28 +128,28 @@ class NodeNameBuilder {
   std::string BuildClassTypeName(
       const ClassDeclarationStatement& class_declaration) const {
     return BuildScopedDeclarationName(
-        "class__" + class_declaration.class_name,
+        "class__" + class_declaration.class_name.name,
         &class_declaration);
   }
 
   std::string BuildClassVTableName(
       const ClassDeclarationStatement& class_declaration) const {
     return BuildScopedDeclarationName(
-        "vtable__" + class_declaration.class_name,
+        "vtable__" + class_declaration.class_name.name,
         &class_declaration);
   }
 
   std::string BuildClassAllocatorName(
       const ClassDeclarationStatement& class_declaration) const {
     return BuildScopedDeclarationName(
-        "new__" + class_declaration.class_name,
+        "new__" + class_declaration.class_name.name,
         &class_declaration);
   }
 
   std::string BuildClassDeallocatorName(
       const ClassDeclarationStatement& class_declaration) const {
     return BuildScopedDeclarationName(
-        "delete__" + class_declaration.class_name,
+        "delete__" + class_declaration.class_name.name,
         &class_declaration);
   }
 
@@ -148,8 +158,8 @@ class NodeNameBuilder {
       const ClassDeclarationStatement* owner_class) const {
     if (owner_class != nullptr) {
       const std::string base_name =
-          "__" + owner_class->class_name + "__" +
-          function_declaration.function_name;
+          "__" + owner_class->class_name.name + "__" +
+          function_declaration.function_name.name;
       if (IsDeclaredInGlobalScope(owner_class)) {
         return base_name;
       }
@@ -158,17 +168,17 @@ class NodeNameBuilder {
     }
 
     if (IsDeclaredInGlobalScope(&function_declaration) &&
-        function_declaration.function_name != "main") {
-      return function_declaration.function_name;
+        function_declaration.function_name.name != "main") {
+      return function_declaration.function_name.name;
     }
 
-    return function_declaration.function_name + "__" +
+    return function_declaration.function_name.name + "__" +
            BuildNodeSuffix(&function_declaration);
   }
 
   std::string BuildGlobalName(const DeclarationStatement& declaration) const {
     return BuildScopedDeclarationName(
-        declaration.variable_name,
+        declaration.variable_name.name,
         &declaration);
   }
 
@@ -261,16 +271,13 @@ struct PreparedState {
 
 class PreparedStateBuilder {
  public:
-  PreparedStateBuilder(
-      const Program& program,
-      const TypeDefiner& type_definer)
-      : program_(program),
-        type_definer_(type_definer) {}
+  explicit PreparedStateBuilder(const Program& program)
+      : program_(program) {}
 
   PreparedState Build() {
     PreparedState state;
     state.numerizer = BuildStatementNumerizer(program_);
-    state.class_relations = BuildClassRelations(program_, type_definer_);
+    state.class_relations = BuildClassRelations(program_);
     state.function_relations = BuildFunctionRelations(program_);
     state.global_relations = BuildGlobalRelations(program_);
 
@@ -320,7 +327,11 @@ class PreparedStateBuilder {
       ClassInfo& class_info = state.class_info_by_decl.at(class_declaration);
       const ClassDeclarationStatement* base_class =
           state.class_relations.GetBaseClass(*class_declaration);
-      assert(!class_declaration->base_class_name.has_value() || base_class != nullptr);
+      const ClassType* class_type = AsClassType(class_declaration->class_type);
+      if (class_type != nullptr &&
+          class_type->base_class == nullptr) {
+        assert(base_class == nullptr);
+      }
 
       if (base_class != nullptr) {
         const ClassInfo& base_info = state.class_info_by_decl.at(base_class);
@@ -330,19 +341,21 @@ class PreparedStateBuilder {
       }
 
       for (const FunctionDeclarationStatement& method : class_declaration->methods) {
-        const FuncType method_type = BuildFunctionType(method);
+        assert(method.function_type != nullptr);
+        const FuncType* method_type = AsFuncType(method.function_type);
+        assert(method_type != nullptr);
         const auto inherited_slot_it =
-            class_info.slot_index_by_name.find(method.function_name);
+            class_info.slot_index_by_name.find(method.function_name.name);
         if (inherited_slot_it == class_info.slot_index_by_name.end()) {
           const size_t slot_index = class_info.vtable_methods.size();
-          class_info.slot_types.push_back(method_type);
+          class_info.slot_types.push_back(*method_type);
           class_info.vtable_methods.push_back(&method);
-          class_info.slot_index_by_name[method.function_name] = slot_index;
+          class_info.slot_index_by_name[method.function_name.name] = slot_index;
           continue;
         }
 
         const size_t slot_index = inherited_slot_it->second;
-        assert(class_info.slot_types[slot_index] == method_type);
+        assert(class_info.slot_types[slot_index] == *method_type);
 
         class_info.vtable_methods[slot_index] = &method;
       }
@@ -350,19 +363,18 @@ class PreparedStateBuilder {
   }
 
   const Program& program_;
-  const TypeDefiner& type_definer_;
 };
 
 class LLVMModuleBuilder;
 
 struct LoweredValue {
   llvm::Value* value = nullptr;
-  Type type;
+  const Type* type = nullptr;
 };
 
 struct StorageLocation {
   llvm::Value* pointer = nullptr;
-  Type stored_type;
+  const Type* stored_type = nullptr;
 };
 
 class FunctionLoweringContext {
@@ -371,9 +383,9 @@ class FunctionLoweringContext {
       LLVMModuleBuilder& owner,
       llvm::Function* function,
       const ClassDeclarationStatement* current_class_context,
-      std::optional<Type> return_type);
+      const Type* return_type);
 
-  llvm::AllocaInst* CreateStackStorage(const Type& type);
+  llvm::AllocaInst* CreateStackStorage(const Type* type);
   void BindStorage(const ASTNode* node, StorageLocation storage);
   void BindThis(llvm::Value* this_value);
   void PreallocateLocalDeclarations(const List<Statement>& statements);
@@ -397,18 +409,18 @@ class FunctionLoweringContext {
   bool IsCurrentBlockTerminated() const;
 
   std::optional<StorageLocation> GetStorageForNode(const ASTNode* node) const;
-  std::optional<Type> EvaluateExpressionType(const Expression& expression) const;
-  const ClassDeclarationStatement* ResolveClassDeclaration(const Type& type) const;
+  const Type* EvaluateExpressionType(const Expression& expression) const;
+  const ClassDeclarationStatement* ResolveClassDeclaration(const Type* type) const;
   const ClassInfo& GetClassInfo(
       const ClassDeclarationStatement& class_declaration) const;
 
-  llvm::Value* EmitLoad(llvm::Value* pointer, const Type& type);
+  llvm::Value* EmitLoad(llvm::Value* pointer, const Type* type);
   llvm::Value* EmitTypeAdjustedPointer(
       llvm::Value* value,
       const ClassDeclarationStatement& from_class,
       const ClassDeclarationStatement& to_class);
   LoweredValue AdjustValueToExpectedType(
-      const Type& expected_type,
+      const Type* expected_type,
       LoweredValue value);
   llvm::Value* BuildFieldPointer(
       const ClassDeclarationStatement& owner_class,
@@ -452,7 +464,7 @@ class FunctionLoweringContext {
   std::optional<LoweredValue> LowerExpression(const Expression& expression);
   void StoreIntoPointer(
       llvm::Value* pointer,
-      const Type& target_type,
+      const Type* target_type,
       const Expression& expression);
   void LowerDeclaration(const DeclarationStatement& declaration);
   void LowerAssignment(const AssignmentStatement& assignment);
@@ -470,7 +482,7 @@ class FunctionLoweringContext {
   llvm::IRBuilder<> builder_;
   const ClassDeclarationStatement* current_class_context_ = nullptr;
   llvm::Value* current_this_value_ = nullptr;
-  std::optional<Type> declared_return_type_;
+  const Type* declared_return_type_ = nullptr;
   std::map<const ASTNode*, StorageLocation> storage_by_node_;
 };
 
@@ -478,10 +490,8 @@ class LLVMModuleBuilder {
  public:
   LLVMModuleBuilder(
       const UseResolver& use_resolver,
-      const TypeDefiner& type_definer,
       PreparedState state)
       : use_resolver_(use_resolver),
-        type_definer_(type_definer),
         state_(std::move(state)),
         context_storage_(std::make_unique<llvm::LLVMContext>()),
         module_storage_(
@@ -713,7 +723,7 @@ class LLVMModuleBuilder {
           *this,
           allocator,
           class_declaration,
-          Type{ClassType{class_declaration->class_name}});
+          nullptr);
       context.Builder().SetInsertPoint(entry_block);
 
       llvm::Value* allocated_object = context.Builder().CreateCall(
@@ -765,7 +775,7 @@ class LLVMModuleBuilder {
           *this,
           function,
           owner_class,
-          function_declaration->return_type);
+          function_declaration->GetReturnType());
       context.Builder().SetInsertPoint(entry_block);
 
       auto argument_it = function->arg_begin();
@@ -809,7 +819,7 @@ class LLVMModuleBuilder {
         module_);
 
     auto* entry_block = llvm::BasicBlock::Create(context_, "entry", global_init_function_);
-    FunctionLoweringContext context(*this, global_init_function_, nullptr, std::nullopt);
+    FunctionLoweringContext context(*this, global_init_function_, nullptr, nullptr);
     context.Builder().SetInsertPoint(entry_block);
 
     const auto& global_declarations =
@@ -826,7 +836,7 @@ class LLVMModuleBuilder {
         continue;
       }
 
-      if (std::holds_alternative<ClassType>(declaration->type.type)) {
+      if (AsClassType(declaration->type) != nullptr) {
         const ClassDeclarationStatement* class_declaration =
             context.ResolveClassDeclaration(declaration->type);
         llvm::Value* allocated_object = context.Builder().CreateCall(
@@ -853,26 +863,30 @@ class LLVMModuleBuilder {
         "main",
         module_);
     auto* entry_block = llvm::BasicBlock::Create(context_, "entry", main_function);
-    FunctionLoweringContext context(*this, main_function, nullptr, Type{IntType{}});
+    FunctionLoweringContext context(
+        *this,
+        main_function,
+        nullptr,
+        GetBuiltinIntType());
     context.Builder().SetInsertPoint(entry_block);
 
     context.Builder().CreateCall(global_init_function_);
 
     llvm::Function* user_main_function = llvm_function_by_decl_.at(user_main);
-    if (!user_main->return_type.has_value()) {
+    if (user_main->GetReturnType() == nullptr) {
       context.Builder().CreateCall(user_main_function);
       context.Builder().CreateRet(
           llvm::ConstantInt::get(llvm::Type::getInt32Ty(context_), 0));
       return;
     }
 
-    if (std::holds_alternative<IntType>(user_main->return_type->type)) {
+    if (IsIntType(user_main->GetReturnType())) {
       llvm::Value* result = context.Builder().CreateCall(user_main_function);
       context.Builder().CreateRet(result);
       return;
     }
 
-    if (std::holds_alternative<BoolType>(user_main->return_type->type)) {
+    if (IsBoolType(user_main->GetReturnType())) {
       llvm::Value* result = context.Builder().CreateCall(user_main_function);
       llvm::Value* extended_result =
           context.Builder().CreateZExt(result, llvm::Type::getInt32Ty(context_));
@@ -893,7 +907,6 @@ class LLVMModuleBuilder {
   }
 
   const UseResolver& use_resolver_;
-  const TypeDefiner& type_definer_;
   PreparedState state_;
 
   std::unique_ptr<llvm::LLVMContext> context_storage_;
@@ -922,14 +935,14 @@ FunctionLoweringContext::FunctionLoweringContext(
     LLVMModuleBuilder& owner,
     llvm::Function* function,
     const ClassDeclarationStatement* current_class_context,
-    std::optional<Type> return_type)
+    const Type* return_type)
     : owner_(owner),
       function_(function),
       builder_(owner.context_),
       current_class_context_(current_class_context),
-      declared_return_type_(std::move(return_type)) {}
+      declared_return_type_(return_type) {}
 
-llvm::AllocaInst* FunctionLoweringContext::CreateStackStorage(const Type& type) {
+llvm::AllocaInst* FunctionLoweringContext::CreateStackStorage(const Type* type) {
   return builder_.CreateAlloca(owner_.llvm_utils_.BuildType(type));
 }
 
@@ -1016,23 +1029,21 @@ const ClassInfo& FunctionLoweringContext::GetClassInfo(
 }
 
 const ClassDeclarationStatement* FunctionLoweringContext::ResolveClassDeclaration(
-    const Type& type) const {
-  const auto* class_type = std::get_if<ClassType>(&type.type);
+    const Type* type) const {
+  const ClassType* class_type = AsClassType(type);
   assert(class_type != nullptr);
-
-  const ClassDeclarationStatement* class_declaration =
-      owner_.type_definer_.GetClassDeclaration(class_type->class_name);
+  const ClassDeclarationStatement* class_declaration = class_type->parent;
   assert(class_declaration != nullptr);
 
   return class_declaration;
 }
 
-std::optional<Type> FunctionLoweringContext::EvaluateExpressionType(
+const Type* FunctionLoweringContext::EvaluateExpressionType(
     const Expression& expression) const {
   return std::visit(
       Utils::Overload{
           [this](const IdentifierExpression& identifier_expression)
-              -> std::optional<Type> {
+              -> const Type* {
             const UseResolver::ResolvedSymbol* resolved_symbol =
                 owner_.use_resolver_.GetResolvedSymbol(
                     identifier_expression.name,
@@ -1041,118 +1052,132 @@ std::optional<Type> FunctionLoweringContext::EvaluateExpressionType(
 
             return resolved_symbol->symbol_data.type;
           },
-          [](const LiteralExpression& literal_expression) -> std::optional<Type> {
+          [](const LiteralExpression& literal_expression) -> const Type* {
             return std::visit(
                 Utils::Overload{
-                    [](int) -> std::optional<Type> {
-                      return Type{IntType{}};
+                    [](int) -> const Type* {
+                      return GetBuiltinIntType();
                     },
-                    [](bool) -> std::optional<Type> {
-                      return Type{BoolType{}};
+                    [](bool) -> const Type* {
+                      return GetBuiltinBoolType();
                     }},
                 literal_expression.value);
           },
-          [this](const FunctionCall& function_call) -> std::optional<Type> {
+          [this](const FunctionCall& function_call) -> const Type* {
             const UseResolver::ResolvedSymbol* resolved_symbol =
                 owner_.use_resolver_.GetResolvedSymbol(
                     function_call.function_name,
                     &function_call);
             assert(resolved_symbol != nullptr);
 
-            const auto* function_type =
-                std::get_if<FuncType>(&resolved_symbol->symbol_data.type.type);
+            const FuncType* function_type = AsFuncType(resolved_symbol->symbol_data.type);
             assert(function_type != nullptr);
 
-            if (function_type->return_type == nullptr) {
-              return std::nullopt;
-            }
-
-            return *function_type->return_type;
+            return function_type->return_type;
           },
-          [this](const MethodCall& method_call) -> std::optional<Type> {
-            const UseResolver::ResolvedSymbol* resolved_symbol =
+          [this](const MethodCall& method_call) -> const Type* {
+            const UseResolver::ResolvedSymbol* receiver_symbol =
                 owner_.use_resolver_.GetResolvedSymbol(
-                    method_call.function_call.function_name,
-                    &method_call.function_call);
-            assert(resolved_symbol != nullptr);
+                    method_call.object_name.name,
+                    &method_call.object_name);
+            assert(receiver_symbol != nullptr);
 
-            const auto* function_type =
-                std::get_if<FuncType>(&resolved_symbol->symbol_data.type.type);
-            assert(function_type != nullptr);
+            const ClassType* receiver_class = AsClassType(receiver_symbol->symbol_data.type);
+            assert(receiver_class != nullptr);
 
-            if (function_type->return_type == nullptr) {
-              return std::nullopt;
-            }
-
-            return *function_type->return_type;
+            const std::optional<ClassMemberLookupResult> lookup_result =
+                LookupClassMember(
+                    *receiver_class,
+                    method_call.function_call.function_name.name,
+                    ClassMemberSearchMode::CurrentClassAndBases);
+            assert(lookup_result.has_value());
+            assert(lookup_result->kind == ClassMemberKind::Method);
+            assert(lookup_result->method_declaration != nullptr);
+            assert(lookup_result->method_declaration->function_type != nullptr);
+            const FuncType* method_type =
+                AsFuncType(lookup_result->method_declaration->function_type);
+            assert(method_type != nullptr);
+            return method_type->return_type;
           },
-          [this](const FieldAccess& field_access) -> std::optional<Type> {
-            const UseResolver::ResolvedSymbol* resolved_symbol =
+          [this](const FieldAccess& field_access) -> const Type* {
+            const UseResolver::ResolvedSymbol* receiver_symbol =
                 owner_.use_resolver_.GetResolvedSymbol(
+                    field_access.object_name.name,
+                    &field_access.object_name);
+            assert(receiver_symbol != nullptr);
+
+            const ClassType* receiver_class = AsClassType(receiver_symbol->symbol_data.type);
+            assert(receiver_class != nullptr);
+
+            const std::optional<ClassMemberLookupResult> lookup_result =
+                LookupClassMember(
+                    *receiver_class,
                     field_access.field_name.name,
-                    &field_access.field_name);
-            assert(resolved_symbol != nullptr);
+                    ClassMemberSearchMode::CurrentClassOnly);
+            assert(lookup_result.has_value());
+            assert(lookup_result->kind == ClassMemberKind::Field);
+            assert(lookup_result->field_declaration != nullptr);
 
-            return resolved_symbol->symbol_data.type;
+            return lookup_result->field_declaration->type;
           },
           [this](const UnaryPlusExpression& unary_expression)
-              -> std::optional<Type> {
+              -> const Type* {
             assert(unary_expression.operand != nullptr);
             return EvaluateExpressionType(*unary_expression.operand);
           },
           [this](const UnaryMinusExpression& unary_expression)
-              -> std::optional<Type> {
+              -> const Type* {
             assert(unary_expression.operand != nullptr);
             return EvaluateExpressionType(*unary_expression.operand);
           },
-          [](const UnaryNotExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const UnaryNotExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const AddExpression&) -> std::optional<Type> {
-            return Type{IntType{}};
+          [](const AddExpression&) -> const Type* {
+            return GetBuiltinIntType();
           },
-          [](const SubtractExpression&) -> std::optional<Type> {
-            return Type{IntType{}};
+          [](const SubtractExpression&) -> const Type* {
+            return GetBuiltinIntType();
           },
-          [](const MultiplyExpression&) -> std::optional<Type> {
-            return Type{IntType{}};
+          [](const MultiplyExpression&) -> const Type* {
+            return GetBuiltinIntType();
           },
-          [](const DivideExpression&) -> std::optional<Type> {
-            return Type{IntType{}};
+          [](const DivideExpression&) -> const Type* {
+            return GetBuiltinIntType();
           },
-          [](const ModuloExpression&) -> std::optional<Type> {
-            return Type{IntType{}};
+          [](const ModuloExpression&) -> const Type* {
+            return GetBuiltinIntType();
           },
-          [](const LogicalAndExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const LogicalAndExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const LogicalOrExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const LogicalOrExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const EqualExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const EqualExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const NotEqualExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const NotEqualExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const LessExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const LessExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const GreaterExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const GreaterExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const LessEqualExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const LessEqualExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           },
-          [](const GreaterEqualExpression&) -> std::optional<Type> {
-            return Type{BoolType{}};
+          [](const GreaterEqualExpression&) -> const Type* {
+            return GetBuiltinBoolType();
           }},
       expression.value);
 }
 
 llvm::Value* FunctionLoweringContext::EmitLoad(
     llvm::Value* pointer,
-    const Type& type) {
+    const Type* type) {
   return builder_.CreateLoad(owner_.llvm_utils_.BuildType(type), pointer);
 }
 
@@ -1184,22 +1209,23 @@ llvm::Value* FunctionLoweringContext::EmitTypeAdjustedPointer(
 }
 
 LoweredValue FunctionLoweringContext::AdjustValueToExpectedType(
-    const Type& expected_type,
+    const Type* expected_type,
     LoweredValue value) {
+  if (expected_type == nullptr) {
+    return value;
+  }
+
   if (expected_type == value.type) {
     return value;
   }
 
-  const auto* expected_class_type = std::get_if<ClassType>(&expected_type.type);
-  const auto* actual_class_type = std::get_if<ClassType>(&value.type.type);
+  const ClassType* expected_class_type = AsClassType(expected_type);
+  const ClassType* actual_class_type = AsClassType(value.type);
   if (expected_class_type == nullptr || actual_class_type == nullptr) {
     return value;
   }
-
-  const ClassDeclarationStatement* expected_class =
-      owner_.type_definer_.GetClassDeclaration(expected_class_type->class_name);
-  const ClassDeclarationStatement* actual_class =
-      owner_.type_definer_.GetClassDeclaration(actual_class_type->class_name);
+  const ClassDeclarationStatement* expected_class = expected_class_type->parent;
+  const ClassDeclarationStatement* actual_class = actual_class_type->parent;
   assert(expected_class != nullptr);
   assert(actual_class != nullptr);
 
@@ -1322,11 +1348,11 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerDirectFunctionCall(
   }
 
   llvm::CallInst* call = builder_.CreateCall(function, call_arguments);
-  if (!function_declaration.return_type.has_value()) {
+  if (function_declaration.GetReturnType() == nullptr) {
     return std::nullopt;
   }
 
-  return LoweredValue{.value = call, .type = *function_declaration.return_type};
+  return LoweredValue{.value = call, .type = function_declaration.GetReturnType()};
 }
 
 std::optional<LoweredValue> FunctionLoweringContext::LowerVirtualCall(
@@ -1336,7 +1362,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerVirtualCall(
     const FunctionDeclarationStatement& method_declaration) {
   const ClassInfo& class_info = GetClassInfo(static_class);
   const auto slot_it =
-      class_info.slot_index_by_name.find(method_declaration.function_name);
+      class_info.slot_index_by_name.find(method_declaration.function_name.name);
   assert(slot_it != class_info.slot_index_by_name.end());
 
   const std::vector<LoweredValue> lowered_arguments =
@@ -1375,11 +1401,11 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerVirtualCall(
       method_declaration,
       owner_.state_.function_relations.GetOwnerClass(method_declaration));
   llvm::CallInst* call = builder_.CreateCall(function_type, function_ptr, call_arguments);
-  if (!method_declaration.return_type.has_value()) {
+  if (method_declaration.GetReturnType() == nullptr) {
     return std::nullopt;
   }
 
-  return LoweredValue{.value = call, .type = *method_declaration.return_type};
+  return LoweredValue{.value = call, .type = method_declaration.GetReturnType()};
 }
 
 std::optional<LoweredValue> FunctionLoweringContext::LowerIdentifierExpression(
@@ -1468,16 +1494,19 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerFieldAccess(
       LowerIdentifierExpression(field_access.object_name);
   assert(receiver_value.has_value());
 
-  const UseResolver::ResolvedSymbol* resolved_field =
-      owner_.use_resolver_.GetResolvedSymbol(
-          field_access.field_name.name,
-          &field_access.field_name);
-  assert(resolved_field != nullptr);
+  const ClassType* receiver_class = AsClassType(receiver_value->type);
+  assert(receiver_class != nullptr);
 
+  const std::optional<ClassMemberLookupResult> resolved_field = LookupClassMember(
+      *receiver_class,
+      field_access.field_name.name,
+      ClassMemberSearchMode::CurrentClassOnly);
+  assert(resolved_field.has_value());
+  assert(resolved_field->kind == ClassMemberKind::Field);
+  assert(resolved_field->field_declaration != nullptr);
   assert(resolved_field->declaring_class != nullptr);
 
-  const auto* field_declaration =
-      static_cast<const DeclarationStatement*>(resolved_field->definition_node);
+  const DeclarationStatement* field_declaration = resolved_field->field_declaration;
   llvm::Value* field_ptr = BuildFieldPointer(
       *resolved_field->declaring_class,
       *field_declaration,
@@ -1495,14 +1524,20 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerMethodCall(
 
   const ClassDeclarationStatement* receiver_class =
       ResolveClassDeclaration(receiver_value->type);
-  const UseResolver::ResolvedSymbol* resolved_method =
-      owner_.use_resolver_.GetResolvedSymbol(
-          method_call.function_call.function_name,
-          &method_call.function_call);
-  assert(resolved_method != nullptr);
+  assert(receiver_class != nullptr);
+  const ClassType* receiver_class_type = AsClassType(receiver_class->class_type);
+  assert(receiver_class_type != nullptr);
 
-  const auto* function_declaration =
-      static_cast<const FunctionDeclarationStatement*>(resolved_method->definition_node);
+  const std::optional<ClassMemberLookupResult> resolved_method = LookupClassMember(
+      *receiver_class_type,
+      method_call.function_call.function_name.name,
+      ClassMemberSearchMode::CurrentClassAndBases);
+  assert(resolved_method.has_value());
+  assert(resolved_method->kind == ClassMemberKind::Method);
+  assert(resolved_method->method_declaration != nullptr);
+
+  const FunctionDeclarationStatement* function_declaration =
+      resolved_method->method_declaration;
   return LowerVirtualCall(
       *receiver_class,
       receiver_value->value,
@@ -1540,7 +1575,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerLogicalAnd(
       llvm::ConstantInt::get(llvm::Type::getInt1Ty(owner_.context_), false),
       false_exit);
   result->addIncoming(right->value, rhs_exit);
-  return LoweredValue{.value = result, .type = Type{BoolType{}}};
+  return LoweredValue{.value = result, .type = GetBuiltinBoolType()};
 }
 
 std::optional<LoweredValue> FunctionLoweringContext::LowerLogicalOr(
@@ -1573,7 +1608,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerLogicalOr(
       llvm::ConstantInt::get(llvm::Type::getInt1Ty(owner_.context_), true),
       true_exit);
   result->addIncoming(right->value, rhs_exit);
-  return LoweredValue{.value = result, .type = Type{BoolType{}}};
+  return LoweredValue{.value = result, .type = GetBuiltinBoolType()};
 }
 
 template <typename Node>
@@ -1589,7 +1624,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerBinaryArithmetic(
 
   return LoweredValue{
       .value = builder_.CreateBinOp(opcode, left->value, right->value),
-      .type = Type{IntType{}}};
+      .type = GetBuiltinIntType()};
 }
 
 template <typename Node>
@@ -1605,7 +1640,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerComparison(
 
   return LoweredValue{
       .value = builder_.CreateICmp(predicate, left->value, right->value),
-      .type = Type{BoolType{}}};
+      .type = GetBuiltinBoolType()};
 }
 
 std::optional<LoweredValue> FunctionLoweringContext::LowerExpression(
@@ -1625,14 +1660,14 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerExpression(
                           .value = llvm::ConstantInt::get(
                               llvm::Type::getInt32Ty(owner_.context_),
                               value),
-                          .type = Type{IntType{}}};
+                          .type = GetBuiltinIntType()};
                     },
                     [this](bool value) -> std::optional<LoweredValue> {
                       return LoweredValue{
                           .value = llvm::ConstantInt::get(
                               llvm::Type::getInt1Ty(owner_.context_),
                               value),
-                          .type = Type{BoolType{}}};
+                          .type = GetBuiltinBoolType()};
                     }},
                 literal_expression.value);
           },
@@ -1654,7 +1689,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerExpression(
                         llvm::Type::getInt32Ty(owner_.context_),
                         0),
                     operand->value),
-                .type = Type{IntType{}}};
+                .type = GetBuiltinIntType()};
           },
           [this](const UnaryNotExpression& unary_expression)
               -> std::optional<LoweredValue> {
@@ -1669,7 +1704,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerExpression(
                     llvm::ConstantInt::get(
                         llvm::Type::getInt1Ty(owner_.context_),
                         true)),
-                .type = Type{BoolType{}}};
+                .type = GetBuiltinBoolType()};
           },
           [this](const AddExpression& node) -> std::optional<LoweredValue> {
             return LowerBinaryArithmetic(node, llvm::Instruction::Add);
@@ -1724,7 +1759,7 @@ std::optional<LoweredValue> FunctionLoweringContext::LowerExpression(
 
 void FunctionLoweringContext::StoreIntoPointer(
     llvm::Value* pointer,
-    const Type& target_type,
+    const Type* target_type,
     const Expression& expression) {
   const std::optional<LoweredValue> lowered_value = LowerExpression(expression);
   assert(lowered_value.has_value());
@@ -1746,7 +1781,7 @@ void FunctionLoweringContext::LowerDeclaration(const DeclarationStatement& decla
     return;
   }
 
-  if (std::holds_alternative<ClassType>(declaration.type.type)) {
+  if (AsClassType(declaration.type) != nullptr) {
     const ClassDeclarationStatement* class_declaration =
         ResolveClassDeclaration(declaration.type);
     llvm::Value* allocated_object = builder_.CreateCall(
@@ -1763,12 +1798,12 @@ void FunctionLoweringContext::LowerDeclaration(const DeclarationStatement& decla
 void FunctionLoweringContext::LowerAssignment(const AssignmentStatement& assignment) {
   const UseResolver::ResolvedSymbol* resolved_symbol =
       owner_.use_resolver_.GetResolvedSymbol(
-          assignment.variable_name,
+          assignment.variable_name.name,
           &assignment);
   assert(resolved_symbol != nullptr);
 
   llvm::Value* target_pointer = nullptr;
-  Type target_type = resolved_symbol->symbol_data.type;
+  const Type* target_type = resolved_symbol->symbol_data.type;
   if (const ClassDeclarationStatement* owner_class =
           owner_.state_.class_relations.GetFieldOwner(resolved_symbol->definition_node);
       owner_class != nullptr) {
@@ -1806,7 +1841,7 @@ void FunctionLoweringContext::LowerPrint(const PrintStatement& print_statement) 
       LowerExpression(*print_statement.expr);
   assert(lowered_value.has_value());
 
-  if (std::holds_alternative<IntType>(lowered_value->type.type)) {
+  if (IsIntType(lowered_value->type)) {
     builder_.CreateCall(
         owner_.printf_function_,
         {
@@ -1815,7 +1850,7 @@ void FunctionLoweringContext::LowerPrint(const PrintStatement& print_statement) 
     return;
   }
 
-  if (std::holds_alternative<BoolType>(lowered_value->type.type)) {
+  if (IsBoolType(lowered_value->type)) {
     llvm::Value* selected_ptr = builder_.CreateSelect(
         lowered_value->value,
         owner_.llvm_utils_.BuildCStringPointer(owner_.str_true_global_),
@@ -1839,7 +1874,7 @@ void FunctionLoweringContext::LowerDelete(const DeleteStatement& delete_statemen
   assert(resolved_symbol != nullptr);
 
   llvm::Value* target_pointer = nullptr;
-  Type target_type = resolved_symbol->symbol_data.type;
+  const Type* target_type = resolved_symbol->symbol_data.type;
   if (const ClassDeclarationStatement* owner_class =
           owner_.state_.class_relations.GetFieldOwner(resolved_symbol->definition_node);
       owner_class != nullptr) {
@@ -1876,7 +1911,7 @@ void FunctionLoweringContext::LowerDelete(const DeleteStatement& delete_statemen
 }
 
 void FunctionLoweringContext::LowerReturn(const ReturnStatement& return_statement) {
-  if (!declared_return_type_.has_value()) {
+  if (declared_return_type_ == nullptr) {
     builder_.CreateRetVoid();
     return;
   }
@@ -1888,7 +1923,7 @@ void FunctionLoweringContext::LowerReturn(const ReturnStatement& return_statemen
   assert(lowered_value.has_value());
 
   const LoweredValue adjusted_value = AdjustValueToExpectedType(
-      *declared_return_type_,
+      declared_return_type_,
       *lowered_value);
   builder_.CreateRet(adjusted_value.value);
 }
@@ -1992,12 +2027,12 @@ void FunctionLoweringContext::EmitDefaultReturnIfNeeded() {
     return;
   }
 
-  if (!declared_return_type_.has_value()) {
+  if (declared_return_type_ == nullptr) {
     builder_.CreateRetVoid();
     return;
   }
 
-  builder_.CreateRet(owner_.llvm_utils_.BuildDefaultConstant(*declared_return_type_));
+  builder_.CreateRet(owner_.llvm_utils_.BuildDefaultConstant(declared_return_type_));
 }
 
 void FunctionLoweringContext::EmitClassDefaultInitializers(
@@ -2035,23 +2070,20 @@ void FunctionLoweringContext::EmitClassDefaultInitializers(
 
 LLVMIRModule LowerToLLVMIRModule(
     const Program& program,
-    const UseResolver& use_resolver,
-    const TypeDefiner& type_definer) {
-  PreparedStateBuilder preparation_builder(program, type_definer);
+    const UseResolver& use_resolver) {
+  PreparedStateBuilder preparation_builder(program);
   PreparedState state = preparation_builder.Build();
 
   LLVMModuleBuilder lowering_builder(
       use_resolver,
-      type_definer,
       std::move(state));
   return lowering_builder.BuildLLVMModule();
 }
 
 std::string LowerToLLVMIR(
     const Program& program,
-    const UseResolver& use_resolver,
-    const TypeDefiner& type_definer) {
-  return LowerToLLVMIRModule(program, use_resolver, type_definer).ToString();
+    const UseResolver& use_resolver) {
+  return LowerToLLVMIRModule(program, use_resolver).ToString();
 }
 
 }  // namespace Parsing

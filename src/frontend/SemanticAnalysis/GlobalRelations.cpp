@@ -32,7 +32,7 @@ class GlobalRelationsVisitor {
               relations_.global_declarations_in_encounter_order_.push_back(&declaration);
             },
             [this](const FunctionDeclarationStatement& function_declaration) {
-              if (function_declaration.function_name == "main" &&
+              if (function_declaration.function_name.name == "main" &&
                   relations_.user_main_ == nullptr) {
                 relations_.user_main_ = &function_declaration;
               }

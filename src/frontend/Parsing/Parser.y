@@ -152,7 +152,52 @@ std::unique_ptr<CallArgument> MakeNamedArgument(
     std::string name,
     Expression value) {
   return std::make_unique<CallArgument>(
-      NamedCallArgument{std::move(name), std::make_unique<Expression>(std::move(value))});
+      NamedCallArgument{
+          IdentifierExpression{std::move(name)},
+          std::make_unique<Expression>(std::move(value))});
+}
+
+std::vector<const Type*> CollectParameterTypes(
+    const std::vector<FunctionParameter>& parameters) {
+  std::vector<const Type*> parameter_types;
+  parameter_types.reserve(parameters.size());
+  for (const FunctionParameter& parameter : parameters) {
+    parameter_types.push_back(parameter.type);
+  }
+
+  return parameter_types;
+}
+
+void SyncClassTypeWithDeclaration(ClassDeclarationStatement& class_declaration) {
+  ClassType* class_type =
+      const_cast<ClassType*>(AsClassType(class_declaration.class_type));
+  if (class_type == nullptr) {
+    return;
+  }
+
+  class_type->parent = &class_declaration;
+  class_type->fields.clear();
+  class_type->methods.clear();
+
+  for (DeclarationStatement& field : class_declaration.fields) {
+    class_type->fields.push_back(ClassFieldType{
+        .type = field.type,
+        .name = &field.variable_name});
+  }
+
+  for (FunctionDeclarationStatement& method : class_declaration.methods) {
+    class_type->methods.push_back(ClassMethodType{
+        .type = AsFuncType(method.function_type),
+        .name = &method.function_name});
+  }
+}
+
+void SyncClassTypeWithStatement(Statement& statement) {
+  if (ClassDeclarationStatement* class_declaration =
+          std::get_if<ClassDeclarationStatement>(&statement.value);
+      class_declaration != nullptr) {
+    SyncClassTypeWithDeclaration(*class_declaration);
+  }
 }
 
 bool IsSemicolonToken(const Tokenizing::TokenVariant& token) {
@@ -305,7 +350,6 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %token VAR_KW "var"
 %token INT_KW "int"
 %token BOOL_KW "bool"
-%token MUTABLE_KW "mutable"
 %token FUNC_KW "func"
 %token CLASS_KW "class"
 %token RETURN_KW "return"
@@ -333,8 +377,6 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %token RIGHT_PAREN ")"
 %token LEFT_BRACE "{"
 %token RIGHT_BRACE "}"
-%token LEFT_BRACKET "["
-%token RIGHT_BRACKET "]"
 
 %token EQUAL_EQUAL "=="
 %token NOT_EQUAL "!="
@@ -365,11 +407,10 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
 %type <ElseTail> else_tail
 %type <Block> block
 
-%type <bool> mutable_opt
-%type <Type> type
-%type <Type> base_type
-%type <std::optional<Type>> return_type_opt
-%type <std::optional<std::string>> inheritance_opt
+%type <const Type*> type
+%type <const Type*> base_type
+%type <const Type*> return_type_opt
+%type <std::optional<IdentifierExpression>> inheritance_opt
 %type <std::vector<FunctionParameter>> param_list_opt
 %type <std::vector<FunctionParameter>> param_list
 %type <FunctionParameter> param
@@ -415,6 +456,7 @@ decl_stmt_list:
     }
   | decl_stmt_list decl_stmt {
       auto statement = std::make_unique<Statement>(std::move($2));
+      SyncClassTypeWithStatement(*statement);
       AddNodeDebugInfo(state, statement.get(), @2);
       $1.push_back(std::move(statement));
       $$ = std::move($1);
@@ -432,6 +474,7 @@ stmt_list:
     }
   | stmt_list stmt {
       auto statement = std::make_unique<Statement>(std::move($2));
+      SyncClassTypeWithStatement(*statement);
       AddNodeDebugInfo(state, statement.get(), @2);
       $1.push_back(std::move(statement));
       $$ = std::move($1);
@@ -483,21 +526,23 @@ decl_stmt:
 ;
 
 var_decl:
-    VAR_KW mutable_opt IDENT type init_opt SEMICOLON {
+    VAR_KW IDENT type init_opt SEMICOLON {
       $$ = DeclarationStatement{
-          std::move($3),
-          std::move($4),
-          $2,
-          std::move($5)};
+          IdentifierExpression{std::move($2)},
+          $3,
+          std::move($4)};
     }
 ;
 
 func_decl:
     FUNC_KW IDENT LEFT_PAREN param_list_opt RIGHT_PAREN return_type_opt block {
+      const Type* function_type = output.type_storage.CreateFunctionType(
+          $6,
+          CollectParameterTypes($4));
       $$ = FunctionDeclarationStatement{
-          std::move($2),
+          function_type,
+          IdentifierExpression{std::move($2)},
           std::move($4),
-          std::move($6),
           std::make_unique<Block>(std::move($7))};
     }
   | FUNC_KW error block {
@@ -509,9 +554,22 @@ func_decl:
 
 class_decl:
     CLASS_KW IDENT inheritance_opt LEFT_BRACE class_field_decl_list class_method_decl_list RIGHT_BRACE {
+      const Type* class_type_handle =
+          output.type_storage.GetOrCreateClassType($2);
+      ClassType* class_type =
+          const_cast<ClassType*>(AsClassType(class_type_handle));
+      assert(class_type != nullptr);
+      const ClassType* base_class = nullptr;
+      if ($3.has_value()) {
+        const Type* base_class_type =
+            output.type_storage.GetOrCreateClassType($3->name);
+        base_class = AsClassType(base_class_type);
+      }
+      class_type->base_class = base_class;
+
       $$ = ClassDeclarationStatement{
-          std::move($2),
-          std::move($3),
+          class_type_handle,
+          IdentifierExpression{std::move($2)},
           std::move($5),
           std::move($6)};
     }
@@ -522,7 +580,8 @@ inheritance_opt:
       $$ = std::nullopt;
     }
   | COLON IDENT {
-      $$ = std::optional<std::string>{std::move($2)};
+      $$ = std::optional<IdentifierExpression>{
+          IdentifierExpression{std::move($2)}};
     }
 ;
 
@@ -543,15 +602,6 @@ class_method_decl_list:
   | class_method_decl_list func_decl {
       $1.push_back(std::move($2));
       $$ = std::move($1);
-    }
-;
-
-mutable_opt:
-    %empty {
-      $$ = false;
-    }
-  | MUTABLE_KW {
-      $$ = true;
     }
 ;
 
@@ -586,44 +636,43 @@ param_list:
 
 param:
     IDENT type {
-      $$ = FunctionParameter{std::move($1), std::move($2)};
+      $$ = FunctionParameter{
+          IdentifierExpression{std::move($1)},
+          $2};
     }
 ;
 
 type:
     base_type {
-      $$ = std::move($1);
-    }
-  | base_type LEFT_BRACKET RIGHT_BRACKET {
-      $$ = Type{ArrayType{std::make_unique<Type>(std::move($1))}};
+      $$ = $1;
     }
 ;
 
 base_type:
     INT_KW {
-      $$ = Type{IntType{}};
+      $$ = output.type_storage.GetIntType();
     }
   | BOOL_KW {
-      $$ = Type{BoolType{}};
+      $$ = output.type_storage.GetBoolType();
     }
   | IDENT {
-      $$ = Type{ClassType{std::move($1)}};
+      $$ = output.type_storage.GetOrCreateClassType($1);
     }
 ;
 
 return_type_opt:
     %empty {
-      $$ = std::nullopt;
+      $$ = nullptr;
     }
   | type {
-      $$ = std::optional<Type>{std::move($1)};
+      $$ = $1;
     }
 ;
 
 assign_stmt:
     IDENT ASSIGN expr SEMICOLON {
       $$ = AssignmentStatement{
-          std::move($1),
+          IdentifierExpression{std::move($1)},
           std::make_unique<Expression>(std::move($3))};
     }
 ;
@@ -704,7 +753,9 @@ block:
 
 func_call:
     IDENT LEFT_PAREN call_args_opt RIGHT_PAREN {
-      $$ = FunctionCall{std::move($1), std::move($3)};
+      $$ = FunctionCall{
+          IdentifierExpression{std::move($1)},
+          std::move($3)};
     }
 ;
 
@@ -918,9 +969,6 @@ BisonParser::symbol_type yylex(ParserState& state) {
           [&location](const Tokenizing::BoolKeyword&) -> BisonParser::symbol_type {
             return BisonParser::make_BOOL_KW(location);
           },
-          [&location](const Tokenizing::MutableKeyword&) -> BisonParser::symbol_type {
-            return BisonParser::make_MUTABLE_KW(location);
-          },
           [&location](const Tokenizing::FuncKeyword&) -> BisonParser::symbol_type {
             return BisonParser::make_FUNC_KW(location);
           },
@@ -998,12 +1046,6 @@ BisonParser::symbol_type yylex(ParserState& state) {
           },
           [&location](const Tokenizing::RightBrace&) -> BisonParser::symbol_type {
             return BisonParser::make_RIGHT_BRACE(location);
-          },
-          [&location](const Tokenizing::LeftBracket&) -> BisonParser::symbol_type {
-            return BisonParser::make_LEFT_BRACKET(location);
-          },
-          [&location](const Tokenizing::RightBracket&) -> BisonParser::symbol_type {
-            return BisonParser::make_RIGHT_BRACKET(location);
           },
           [&location](const Tokenizing::EqualEqual&) -> BisonParser::symbol_type {
             return BisonParser::make_EQUAL_EQUAL(location);

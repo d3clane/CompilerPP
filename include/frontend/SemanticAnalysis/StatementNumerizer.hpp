@@ -19,7 +19,6 @@ class StatementNumerizer {
   };
 
   std::optional<ScopedStmtRef> GetRef(const ASTNode* node) const;
-  const ASTNode* GetScopeOwnerFromRef(const ScopedStmtRef& ref) const;
   std::optional<ScopedStmtRef> ProjectUseToScope(
       ScopedStmtRef use_ref,
       const ASTNode* target_scope_owner) const;

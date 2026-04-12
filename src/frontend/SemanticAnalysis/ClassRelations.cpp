@@ -84,9 +84,11 @@ class ClassRelationsVisitor {
   void VisitClassDeclaration(const ClassDeclarationStatement& class_declaration) {
     relations_.classes_in_encounter_order_.push_back(&class_declaration);
 
-    if (class_declaration.base_class_name.has_value()) {
-      unresolved_base_name_by_class_[&class_declaration] =
-          *class_declaration.base_class_name;
+    const ClassType* class_type = AsClassType(class_declaration.class_type);
+    if (class_type != nullptr &&
+        class_type->base_class != nullptr) {
+      unresolved_base_type_by_class_[&class_declaration] =
+          class_type->base_class;
     }
 
     for (size_t i = 0; i < class_declaration.fields.size(); ++i) {
@@ -105,7 +107,7 @@ class ClassRelationsVisitor {
 
   ClassRelations& relations_;
   const ClassDeclarationStatement* current_class_ = nullptr;
-  std::map<const ClassDeclarationStatement*, std::string> unresolved_base_name_by_class_;
+  std::map<const ClassDeclarationStatement*, const ClassType*> unresolved_base_type_by_class_;
 
   friend class ClassRelationsBuilder;
 };
@@ -114,10 +116,8 @@ class ClassRelationsBuilder {
  public:
   ClassRelationsBuilder(
       const Program& program,
-      const TypeDefiner& type_definer,
       DebugCtx& debug_ctx)
       : program_(program),
-        type_definer_(type_definer),
         debug_ctx_(debug_ctx) {}
 
   ClassRelations Build() {
@@ -125,10 +125,9 @@ class ClassRelationsBuilder {
     ClassRelationsVisitor visitor(relations);
     visitor.Build(program_);
 
-    for (const auto& [class_declaration, base_class_name] :
-         visitor.unresolved_base_name_by_class_) {
-      const ClassDeclarationStatement* base_class =
-          type_definer_.GetClassDeclaration(base_class_name);
+    for (const auto& [class_declaration, base_class_type] :
+         visitor.unresolved_base_type_by_class_) {
+      const ClassDeclarationStatement* base_class = base_class_type->parent;
       if (base_class != nullptr) {
         relations.base_class_by_class_[class_declaration] = base_class;
       }
@@ -164,7 +163,7 @@ class ClassRelationsBuilder {
     if (!stack_visited.insert(&class_declaration).second) {
       ReportCodeError(
           &class_declaration,
-          "cyclic inheritance involving class " + class_declaration.class_name);
+          "cyclic inheritance involving class " + class_declaration.class_name.name);
       return;
     }
 
@@ -194,7 +193,6 @@ class ClassRelationsBuilder {
   }
 
   const Program& program_;
-  const TypeDefiner& type_definer_;
   DebugCtx& debug_ctx_;
 };
 
@@ -260,17 +258,15 @@ ClassRelations::GetInheritanceChainFromRoot(
 
 ClassRelations BuildClassRelations(
     const Program& program,
-    const TypeDefiner& type_definer,
     DebugCtx& debug_ctx) {
-  ClassRelationsBuilder builder(program, type_definer, debug_ctx);
+  ClassRelationsBuilder builder(program, debug_ctx);
   return builder.Build();
 }
 
 ClassRelations BuildClassRelations(
-    const Program& program,
-    const TypeDefiner& type_definer) {
+    const Program& program) {
   DebugCtx debug_ctx;
-  ClassRelations relations = BuildClassRelations(program, type_definer, debug_ctx);
+  ClassRelations relations = BuildClassRelations(program, debug_ctx);
   if (debug_ctx.GetErrors().HasErrors()) {
     debug_ctx.GetErrors().ThrowErrors();
   }

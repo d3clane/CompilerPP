@@ -18,7 +18,7 @@ namespace {
 
 [[noreturn]] void ThrowFunctionCallNotSupported(const FunctionCall& function_call) {
   throw std::runtime_error(
-      "Function calls are not supported by interpreter: " + function_call.function_name);
+      "Function calls are not supported by interpreter: " + function_call.function_name.name);
 }
 
 [[noreturn]] void ThrowFieldAccessNotSupported(const FieldAccess& field_access) {
@@ -30,7 +30,7 @@ namespace {
 [[noreturn]] void ThrowMethodCallNotSupported(const MethodCall& method_call) {
   throw std::runtime_error(
       "Method calls are not supported by interpreter: " +
-      method_call.object_name.name + "." + method_call.function_call.function_name);
+      method_call.object_name.name + "." + method_call.function_call.function_name.name);
 }
 
 [[noreturn]] void ThrowClassNotSupported(const std::string& class_name) {
@@ -215,10 +215,10 @@ void ExecuteBlock(const Block& block, InterpreterRuntime& runtime, std::ostream&
 
 void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRuntime& runtime) {
   if (runtime.context.variables.find(&declaration) != runtime.context.variables.end()) {
-    throw std::runtime_error("Variable already declared: " + declaration.variable_name);
+    throw std::runtime_error("Variable already declared: " + declaration.variable_name.name);
   }
 
-  if (std::holds_alternative<IntType>(declaration.type.type)) {
+  if (std::holds_alternative<IntType>(declaration.type->type)) {
     RuntimeValue value{0};
     if (declaration.initializer != nullptr) {
       value = EvaluateExpression(*declaration.initializer, runtime);
@@ -228,7 +228,7 @@ void ExecuteDeclaration(const DeclarationStatement& declaration, InterpreterRunt
     return;
   }
 
-  if (std::holds_alternative<BoolType>(declaration.type.type)) {
+  if (std::holds_alternative<BoolType>(declaration.type->type)) {
     RuntimeValue value{false};
     if (declaration.initializer != nullptr) {
       value = EvaluateExpression(*declaration.initializer, runtime);
@@ -245,14 +245,14 @@ void ExecuteAssignment(const AssignmentStatement& assignment, InterpreterRuntime
   assert(assignment.expr != nullptr);
 
   const ASTNode* definition_node = ResolveVariableDefinitionNode(
-      assignment.variable_name,
+      assignment.variable_name.name,
       &assignment,
       runtime.use_resolver,
       "Variable is not declared before assignment: ");
   auto variable_it = runtime.context.variables.find(definition_node);
   if (variable_it == runtime.context.variables.end()) {
     throw std::runtime_error(
-        "Variable is not declared before assignment: " + assignment.variable_name);
+        "Variable is not declared before assignment: " + assignment.variable_name.name);
   }
 
   const RuntimeValue assigned_value = EvaluateExpression(*assignment.expr, runtime);
@@ -326,7 +326,7 @@ void ExecuteStatement(
             // Function bodies are not executed during declaration.
           },
           [](const ClassDeclarationStatement& class_declaration) {
-            ThrowClassNotSupported(class_declaration.class_name);
+            ThrowClassNotSupported(class_declaration.class_name.name);
           },
           [&runtime](const AssignmentStatement& assignment) {
             ExecuteAssignment(assignment, runtime);
@@ -382,7 +382,7 @@ InterpreterContext Interpret(const Program& program, std::ostream& output) {
     const auto* function_declaration =
         std::get_if<FunctionDeclarationStatement>(&program.top_statements[i]->value);
     if (function_declaration != nullptr) {
-      if (function_declaration->function_name == "main") {
+      if (function_declaration->function_name.name == "main") {
         main_function = function_declaration;
       }
       continue;
@@ -391,7 +391,7 @@ InterpreterContext Interpret(const Program& program, std::ostream& output) {
     const auto* class_declaration =
         std::get_if<ClassDeclarationStatement>(&program.top_statements[i]->value);
     if (class_declaration != nullptr) {
-      ThrowClassNotSupported(class_declaration->class_name);
+      ThrowClassNotSupported(class_declaration->class_name.name);
     }
 
     throw std::runtime_error("Top-level statement is not declaration");

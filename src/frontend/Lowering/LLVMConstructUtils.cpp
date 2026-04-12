@@ -1,5 +1,6 @@
 #include "Lowering/LLVMConstructUtils.hpp"
 
+#include <cassert>
 #include <vector>
 
 #include <llvm/IR/Constants.h>
@@ -19,7 +20,8 @@ LLVMConstructUtils::LLVMConstructUtils(
     : context_(context),
       module_(module) {}
 
-llvm::Type* LLVMConstructUtils::BuildType(const Type& type) const {
+llvm::Type* LLVMConstructUtils::BuildType(const Type* type) const {
+  assert(type != nullptr);
   return std::visit(
       Utils::Overload{
           [this](const IntType&) -> llvm::Type* {
@@ -31,22 +33,19 @@ llvm::Type* LLVMConstructUtils::BuildType(const Type& type) const {
           [this](const ClassType&) -> llvm::Type* {
             return llvm::PointerType::getUnqual(context_);
           },
-          [this](const ArrayType&) -> llvm::Type* {
-            return llvm::PointerType::getUnqual(context_);
-          },
           [this](const FuncType&) -> llvm::Type* {
             return llvm::PointerType::getUnqual(context_);
           }},
-      type.type);
+      type->type);
 }
 
 llvm::Type* LLVMConstructUtils::BuildReturnType(
-    const std::optional<Type>& type) const {
-  if (!type.has_value()) {
+    const Type* type) const {
+  if (type == nullptr) {
     return llvm::Type::getVoidTy(context_);
   }
 
-  return BuildType(*type);
+  return BuildType(type);
 }
 
 llvm::FunctionType* LLVMConstructUtils::BuildFunctionType(
@@ -62,12 +61,16 @@ llvm::FunctionType* LLVMConstructUtils::BuildFunctionType(
   }
 
   return llvm::FunctionType::get(
-      BuildReturnType(function_declaration.return_type),
+      BuildReturnType(
+          AsFuncType(function_declaration.function_type) != nullptr
+              ? AsFuncType(function_declaration.function_type)->return_type
+              : nullptr),
       parameter_types,
       false);
 }
 
-llvm::Constant* LLVMConstructUtils::BuildDefaultConstant(const Type& type) const {
+llvm::Constant* LLVMConstructUtils::BuildDefaultConstant(const Type* type) const {
+  assert(type != nullptr);
   return std::visit(
       Utils::Overload{
           [this](const IntType&) -> llvm::Constant* {
@@ -80,15 +83,11 @@ llvm::Constant* LLVMConstructUtils::BuildDefaultConstant(const Type& type) const
             return llvm::ConstantPointerNull::get(
                 llvm::PointerType::getUnqual(context_));
           },
-          [this](const ArrayType&) -> llvm::Constant* {
-            return llvm::ConstantPointerNull::get(
-                llvm::PointerType::getUnqual(context_));
-          },
           [this](const FuncType&) -> llvm::Constant* {
             return llvm::ConstantPointerNull::get(
                 llvm::PointerType::getUnqual(context_));
           }},
-      type.type);
+      type->type);
 }
 
 llvm::GlobalVariable* LLVMConstructUtils::CreateCStringGlobal(

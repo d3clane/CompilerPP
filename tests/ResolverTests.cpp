@@ -623,9 +623,12 @@ TEST(ResolverTests, ResolvesBaseMethodCallForDerivedReceiverClass) {
       std::get_if<Parsing::MethodCall>(&expression_statement->value);
   ASSERT_NE(method_call, nullptr);
 
+  EXPECT_NE(
+      resolver.GetUsedVarDef("obj", &method_call->object_name),
+      nullptr);
   EXPECT_EQ(
       resolver.GetUsedVarDef("ping", &method_call->function_call),
-      &base_class->methods[0]);
+      nullptr);
 }
 
 TEST(ResolverTests, ResolvesBaseMethodBeforeGlobalFunctionInsideDerivedMethod) {
