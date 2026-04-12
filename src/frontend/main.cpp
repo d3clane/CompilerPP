@@ -16,7 +16,6 @@
 #include "SemanticAnalysis/StatementNumerizer.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "SemanticAnalysis/TypeChecker.hpp"
-#include "SemanticAnalysis/TypeDefiner.hpp"
 #include "Tokenizing/Lexer.hpp"
 
 int main(int argc, char* argv[]) {
@@ -66,8 +65,6 @@ int main(int argc, char* argv[]) {
 
     Parsing::StatementNumerizer numerizer =
         Parsing::BuildStatementNumerizer(program);
-    const Parsing::TypeDefiner type_definer =
-        Parsing::BuildTypeDefiner(program);
     Parsing::SymbolTable symbol_table =
         Parsing::BuildSymbolTable(
             program,
@@ -78,12 +75,10 @@ int main(int argc, char* argv[]) {
     Parsing::CheckAccessAllowance(
         program,
         use_resolver,
-        type_definer,
         *debug_ctx);
     Parsing::CheckTypes(
         program,
         use_resolver,
-        type_definer,
         *debug_ctx);
 
     if (debug_ctx->GetErrors().HasErrors()) {
@@ -92,8 +87,7 @@ int main(int argc, char* argv[]) {
 
     Parsing::LLVMIRModule llvm_ir = Parsing::LowerToLLVMIRModule(
         program,
-        use_resolver,
-        type_definer);
+        use_resolver);
     Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
   } catch (const std::exception& error) {
     if (debug_ctx.has_value() && debug_ctx->GetErrors().HasErrors()) {

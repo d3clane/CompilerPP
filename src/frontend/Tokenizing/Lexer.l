@@ -119,7 +119,6 @@ IDENT_BODY [A-Za-z0-9_]
 "var"           { CREATE_TOKEN(VarKeyword); }
 "int"           { CREATE_TOKEN(IntKeyword); }
 "bool"          { CREATE_TOKEN(BoolKeyword); }
-"mutable"       { CREATE_TOKEN(MutableKeyword); }
 "func"          { CREATE_TOKEN(FuncKeyword); }
 "class"         { CREATE_TOKEN(ClassKeyword); }
 "return"        { CREATE_TOKEN(ReturnKeyword); }
@@ -154,8 +153,6 @@ IDENT_BODY [A-Za-z0-9_]
 ")"             { CREATE_TOKEN(RightParen); }
 "{"             { CREATE_TOKEN(LeftBrace); }
 "}"             { CREATE_TOKEN(RightBrace); }
-"["             { CREATE_TOKEN(LeftBracket); }
-"]"             { CREATE_TOKEN(RightBracket); }
 
 [0-9]+          {
                   const Position start = CurrentPosition();

@@ -7,7 +7,7 @@
 namespace Parsing {
 namespace {
 
-std::string PrintType(const Type& type);
+std::string PrintType(const Type* type);
 
 void AppendLine(std::string& output, int indent, const std::string& text);
 void PrintExpressionTree(const Expression& expression, int indent, std::string& output);
@@ -83,20 +83,21 @@ void PrintBinaryExpressionTree(
   PrintExpressionTree(*binary_expression.right, indent + 1, output);
 }
 
-std::string PrintType(const Type& type) {
+std::string PrintType(const Type* type) {
+  if (type == nullptr) {
+    return "<void>";
+  }
+
   return std::visit(
       Utils::Overload{
           [](const IntType&) -> std::string { return "int"; },
           [](const BoolType&) -> std::string { return "bool"; },
           [](const ClassType& class_type) -> std::string {
-            return class_type.class_name;
-          },
-          [](const ArrayType& array_type) -> std::string {
-            if (array_type.element_type == nullptr) {
-              return "<invalid>[]";
+            if (class_type.parent == nullptr) {
+              return "<invalid-class>";
             }
 
-            return PrintType(*array_type.element_type) + "[]";
+            return class_type.parent->class_name.name;
           },
           [](const FuncType& func_type) -> std::string {
             std::string result = "func(";
@@ -109,12 +110,12 @@ std::string PrintType(const Type& type) {
             result += ")";
 
             if (func_type.return_type != nullptr) {
-              result += " -> " + PrintType(*func_type.return_type);
+              result += " -> " + PrintType(func_type.return_type);
             }
 
             return result;
           }},
-      type.type);
+      type->type);
 }
 
 void AppendLine(std::string& output, int indent, const std::string& text) {
@@ -125,7 +126,7 @@ void AppendLine(std::string& output, int indent, const std::string& text) {
 }
 
 void PrintFunctionCallTree(const FunctionCall& function_call, int indent, std::string& output) {
-  AppendLine(output, indent, "FunctionCall: " + function_call.function_name);
+  AppendLine(output, indent, "FunctionCall: " + function_call.function_name.name);
   AppendLine(output, indent + 1, "Arguments:");
 
   if (function_call.arguments.empty()) {
@@ -140,7 +141,7 @@ void PrintFunctionCallTree(const FunctionCall& function_call, int indent, std::s
         Utils::Overload{
             [&output, indent](const NamedCallArgument& argument) {
               assert(argument.value != nullptr);
-              AppendLine(output, indent + 2, "NamedArgument: " + argument.name);
+              AppendLine(output, indent + 2, "NamedArgument: " + argument.name.name);
               PrintExpressionTree(*argument.value, indent + 3, output);
             },
             [&output, indent](const PositionalCallArgument& argument) {
@@ -251,10 +252,7 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
       Utils::Overload{
           [&output, indent](const DeclarationStatement& declaration) {
             std::string line = "DeclarationStatement: ";
-            if (declaration.is_mutable) {
-              line += "mutable ";
-            }
-            line += declaration.variable_name + " " + PrintType(declaration.type);
+            line += declaration.variable_name.name + " " + PrintType(declaration.type);
             AppendLine(output, indent, line);
 
             if (declaration.initializer != nullptr) {
@@ -265,7 +263,7 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
           [&output, indent](const FunctionDeclarationStatement& function_declaration) {
             assert(function_declaration.body != nullptr);
 
-            AppendLine(output, indent, "FunctionDeclarationStatement: " + function_declaration.function_name);
+            AppendLine(output, indent, "FunctionDeclarationStatement: " + function_declaration.function_name.name);
 
             AppendLine(output, indent + 1, "Parameters:");
             if (function_declaration.parameters.empty()) {
@@ -275,25 +273,28 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
                 AppendLine(
                     output,
                     indent + 2,
-                    "Parameter: " + function_declaration.parameters[i].name +
+                    "Parameter: " + function_declaration.parameters[i].name.name +
                         " " +
                         PrintType(function_declaration.parameters[i].type));
               }
             }
 
-            if (!function_declaration.return_type.has_value()) {
+            if (function_declaration.GetReturnType() == nullptr) {
               AppendLine(output, indent + 1, "ReturnType: <empty>");
             } else {
-              AppendLine(output, indent + 1, "ReturnType: " + PrintType(*function_declaration.return_type));
+              AppendLine(output, indent + 1, "ReturnType: " + PrintType(function_declaration.GetReturnType()));
             }
 
             AppendLine(output, indent + 1, "Body:");
             PrintBlockTree(*function_declaration.body, indent + 2, output);
           },
           [&output, indent](const ClassDeclarationStatement& class_declaration) {
-            std::string class_line = "ClassDeclarationStatement: " + class_declaration.class_name;
-            if (class_declaration.base_class_name.has_value()) {
-              class_line += " : " + *class_declaration.base_class_name;
+            std::string class_line = "ClassDeclarationStatement: " + class_declaration.class_name.name;
+            const ClassType* class_type = AsClassType(class_declaration.class_type);
+            if (class_type != nullptr &&
+                class_type->base_class != nullptr &&
+                class_type->base_class->parent != nullptr) {
+              class_line += " : " + class_type->base_class->parent->class_name.name;
             }
             AppendLine(output, indent, class_line);
 
@@ -303,10 +304,7 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
             } else {
               for (size_t i = 0; i < class_declaration.fields.size(); ++i) {
                 std::string field_line = "Field: ";
-                if (class_declaration.fields[i].is_mutable) {
-                  field_line += "mutable ";
-                }
-                field_line += class_declaration.fields[i].variable_name + " " +
+                field_line += class_declaration.fields[i].variable_name.name + " " +
                               PrintType(class_declaration.fields[i].type);
                 AppendLine(output, indent + 2, field_line);
 
@@ -327,7 +325,7 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
               for (size_t i = 0; i < class_declaration.methods.size(); ++i) {
                 const FunctionDeclarationStatement& method = class_declaration.methods[i];
                 assert(method.body != nullptr);
-                AppendLine(output, indent + 2, "Method: " + method.function_name);
+                AppendLine(output, indent + 2, "Method: " + method.function_name.name);
 
                 AppendLine(output, indent + 3, "Parameters:");
                 if (method.parameters.empty()) {
@@ -337,17 +335,17 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
                     AppendLine(
                         output,
                         indent + 4,
-                        "Parameter: " + method.parameters[j].name +
+                        "Parameter: " + method.parameters[j].name.name +
                             " " +
                             PrintType(method.parameters[j].type));
                   }
                 }
 
-                if (method.return_type.has_value()) {
+                if (method.GetReturnType() != nullptr) {
                   AppendLine(
                       output,
                       indent + 3,
-                      "ReturnType: " + PrintType(*method.return_type));
+                      "ReturnType: " + PrintType(method.GetReturnType()));
                 } else {
                   AppendLine(output, indent + 3, "ReturnType: <empty>");
                 }
@@ -359,7 +357,7 @@ void PrintStatementTree(const Statement& statement, int indent, std::string& out
           },
           [&output, indent](const AssignmentStatement& assignment) {
             assert(assignment.expr != nullptr);
-            AppendLine(output, indent, "AssignmentStatement: " + assignment.variable_name);
+            AppendLine(output, indent, "AssignmentStatement: " + assignment.variable_name.name);
             PrintExpressionTree(*assignment.expr, indent + 1, output);
           },
           [&output, indent](const PrintStatement& print_statement) {

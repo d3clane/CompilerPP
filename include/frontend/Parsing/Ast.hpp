@@ -18,7 +18,8 @@ namespace Parsing {
 
 class ASTNode {
  public:
-  friend bool operator==(const ASTNode& a, const ASTNode& b) = default;
+  virtual ~ASTNode() = default;
+  friend bool operator==(const ASTNode& left, const ASTNode& right) = default;
 };
 
 template <typename T>
@@ -31,6 +32,10 @@ struct IdentifierExpression : ASTNode {
       : name(std::move(name_in)) {}
 
   std::string name;
+
+  operator const std::string&() const {
+    return name;
+  }
 
   ADD_OPERATOR_EQUAL(IdentifierExpression)
 };
@@ -106,97 +111,81 @@ concept UnaryExpressionNode =
 
 struct UnaryPlusExpression : UnaryOperationBase {
   using UnaryOperationBase::UnaryOperationBase;
-
   ADD_OPERATOR_EQUAL(UnaryPlusExpression)
 };
 
 struct UnaryMinusExpression : UnaryOperationBase {
   using UnaryOperationBase::UnaryOperationBase;
-
   ADD_OPERATOR_EQUAL(UnaryMinusExpression)
 };
 
 struct UnaryNotExpression : UnaryOperationBase {
   using UnaryOperationBase::UnaryOperationBase;
-
   ADD_OPERATOR_EQUAL(UnaryNotExpression)
 };
 
 struct AddExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(AddExpression)
 };
 
 struct SubtractExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(SubtractExpression)
 };
 
 struct MultiplyExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(MultiplyExpression)
 };
 
 struct DivideExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(DivideExpression)
 };
 
 struct ModuloExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(ModuloExpression)
 };
 
 struct LogicalAndExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(LogicalAndExpression)
 };
 
 struct LogicalOrExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(LogicalOrExpression)
 };
 
 struct EqualExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(EqualExpression)
 };
 
 struct NotEqualExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(NotEqualExpression)
 };
 
 struct LessExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(LessExpression)
 };
 
 struct GreaterExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(GreaterExpression)
 };
 
 struct LessEqualExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(LessEqualExpression)
 };
 
 struct GreaterEqualExpression : BinaryOperationBase {
   using BinaryOperationBase::BinaryOperationBase;
-
   ADD_OPERATOR_EQUAL(GreaterEqualExpression)
 };
 
@@ -204,12 +193,12 @@ struct NamedCallArgument : ASTNode {
   NamedCallArgument() = default;
 
   NamedCallArgument(
-      std::string name_in,
+      IdentifierExpression name_in,
       std::unique_ptr<Expression> value_in)
       : name(std::move(name_in)),
         value(std::move(value_in)) {}
 
-  std::string name;
+  IdentifierExpression name;
   std::unique_ptr<Expression> value;
 
   ADD_OPERATOR_EQUAL(NamedCallArgument)
@@ -231,11 +220,11 @@ using CallArgument = std::variant<NamedCallArgument, PositionalCallArgument>;
 struct FunctionCall : ASTNode {
   FunctionCall() = default;
 
-  FunctionCall(std::string function_name_in, List<CallArgument> arguments_in)
+  FunctionCall(IdentifierExpression function_name_in, List<CallArgument> arguments_in)
       : function_name(std::move(function_name_in)),
         arguments(std::move(arguments_in)) {}
 
-  std::string function_name;
+  IdentifierExpression function_name;
   List<CallArgument> arguments;
 
   ADD_OPERATOR_EQUAL(FunctionCall)
@@ -305,12 +294,12 @@ struct AssignmentStatement : ASTNode {
   AssignmentStatement() = default;
 
   AssignmentStatement(
-      std::string variable_name_in,
+      IdentifierExpression variable_name_in,
       std::unique_ptr<Expression> expr_in)
       : variable_name(std::move(variable_name_in)),
         expr(std::move(expr_in)) {}
 
-  std::string variable_name;
+  IdentifierExpression variable_name;
   std::unique_ptr<Expression> expr;
 
   ADD_OPERATOR_EQUAL(AssignmentStatement)
@@ -352,12 +341,12 @@ struct ReturnStatement : ASTNode {
 struct FunctionParameter : ASTNode {
   FunctionParameter() = default;
 
-  FunctionParameter(std::string name_in, Type type_in)
+  FunctionParameter(IdentifierExpression name_in, const Type* type_in)
       : name(std::move(name_in)),
-        type(std::move(type_in)) {}
+        type(type_in) {}
 
-  std::string name;
-  Type type;
+  IdentifierExpression name;
+  const Type* type = nullptr;
 
   ADD_OPERATOR_EQUAL(FunctionParameter)
 };
@@ -371,19 +360,28 @@ struct FunctionDeclarationStatement : ASTNode {
   FunctionDeclarationStatement() = default;
 
   FunctionDeclarationStatement(
-      std::string function_name_in,
+      const Type* function_type_in,
+      IdentifierExpression function_name_in,
       std::vector<FunctionParameter> parameters_in,
-      std::optional<Type> return_type_in,
       std::unique_ptr<Block> body_in)
-      : function_name(std::move(function_name_in)),
+      : function_type(function_type_in),
+        function_name(std::move(function_name_in)),
         parameters(std::move(parameters_in)),
-        return_type(std::move(return_type_in)),
         body(std::move(body_in)) {}
 
-  std::string function_name;
+  const Type* function_type = nullptr;
+  IdentifierExpression function_name;
   std::vector<FunctionParameter> parameters;
-  std::optional<Type> return_type;
   std::unique_ptr<Block> body;
+
+  const Type* GetReturnType() const {
+    const FuncType* function_type_value = AsFuncType(function_type);
+    if (function_type_value == nullptr) {
+      return nullptr;
+    }
+
+    return function_type_value->return_type;
+  }
 
   ADD_OPERATOR_EQUAL(FunctionDeclarationStatement)
 };
@@ -392,18 +390,15 @@ struct DeclarationStatement : ASTNode {
   DeclarationStatement() = default;
 
   DeclarationStatement(
-      std::string variable_name_in,
-      Type type_in,
-      bool is_mutable_in,
+      IdentifierExpression variable_name_in,
+      const Type* type_in,
       std::unique_ptr<Expression> initializer_in)
       : variable_name(std::move(variable_name_in)),
-        type(std::move(type_in)),
-        is_mutable(is_mutable_in),
+        type(type_in),
         initializer(std::move(initializer_in)) {}
 
-  std::string variable_name;
-  Type type;
-  bool is_mutable;
+  IdentifierExpression variable_name;
+  const Type* type = nullptr;
   std::unique_ptr<Expression> initializer;
 
   ADD_OPERATOR_EQUAL(DeclarationStatement)
@@ -413,17 +408,17 @@ struct ClassDeclarationStatement : ASTNode {
   ClassDeclarationStatement() = default;
 
   ClassDeclarationStatement(
-      std::string class_name_in,
-      std::optional<std::string> base_class_name_in,
+      const Type* class_type_in,
+      IdentifierExpression class_name_in,
       std::vector<DeclarationStatement> fields_in,
       std::vector<FunctionDeclarationStatement> methods_in)
-      : class_name(std::move(class_name_in)),
-        base_class_name(std::move(base_class_name_in)),
+      : class_type(class_type_in),
+        class_name(std::move(class_name_in)),
         fields(std::move(fields_in)),
         methods(std::move(methods_in)) {}
 
-  std::string class_name;
-  std::optional<std::string> base_class_name;
+  const Type* class_type = nullptr;
+  IdentifierExpression class_name;
   std::vector<DeclarationStatement> fields;
   std::vector<FunctionDeclarationStatement> methods;
 
@@ -499,13 +494,20 @@ struct Statement : ASTNode {
 
 struct Program : ASTNode {
   Program() = default;
+  Program(Program&&) noexcept = default;
+  Program& operator=(Program&&) noexcept = default;
+  Program(const Program&) = delete;
+  Program& operator=(const Program&) = delete;
 
   explicit Program(List<Statement> top_statements_in)
       : top_statements(std::move(top_statements_in)) {}
 
+  TypeStorage type_storage;
   List<Statement> top_statements;
 
-  ADD_OPERATOR_EQUAL(Program)
+  friend bool operator==(const Program& left, const Program& right) {
+    return left.top_statements == right.top_statements;
+  }
 };
 
 #undef ADD_OPERATOR_EQUAL

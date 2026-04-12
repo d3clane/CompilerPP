@@ -16,7 +16,6 @@ namespace Tokenizing {
 ADD_TOKEN(VarKeyword)
 ADD_TOKEN(IntKeyword)
 ADD_TOKEN(BoolKeyword)
-ADD_TOKEN(MutableKeyword)
 ADD_TOKEN(FuncKeyword)
 ADD_TOKEN(ClassKeyword)
 ADD_TOKEN(ReturnKeyword)
@@ -44,8 +43,6 @@ ADD_TOKEN(LeftParen)
 ADD_TOKEN(RightParen)
 ADD_TOKEN(LeftBrace)
 ADD_TOKEN(RightBrace)
-ADD_TOKEN(LeftBracket)
-ADD_TOKEN(RightBracket)
 
 ADD_TOKEN(EqualEqual)
 ADD_TOKEN(NotEqual)
@@ -70,7 +67,6 @@ using TokenVariant = std::variant<
     VarKeyword,
     IntKeyword,
     BoolKeyword,
-    MutableKeyword,
     FuncKeyword,
     ClassKeyword,
     ReturnKeyword,
@@ -97,8 +93,6 @@ using TokenVariant = std::variant<
     RightParen,
     LeftBrace,
     RightBrace,
-    LeftBracket,
-    RightBracket,
     EqualEqual,
     NotEqual,
     Less,

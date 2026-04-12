@@ -1,6 +1,5 @@
 #pragma once
 
-#include <optional>
 #include <string>
 
 #include "Parsing/Ast.hpp"
@@ -21,12 +20,12 @@ class LLVMConstructUtils {
  public:
   LLVMConstructUtils(llvm::LLVMContext& context, llvm::Module& module);
 
-  llvm::Type* BuildType(const Type& type) const;
-  llvm::Type* BuildReturnType(const std::optional<Type>& type) const;
+  llvm::Type* BuildType(const Type* type) const;
+  llvm::Type* BuildReturnType(const Type* type) const;
   llvm::FunctionType* BuildFunctionType(
       const FunctionDeclarationStatement& function_declaration,
       const ClassDeclarationStatement* owner_class) const;
-  llvm::Constant* BuildDefaultConstant(const Type& type) const;
+  llvm::Constant* BuildDefaultConstant(const Type* type) const;
 
   llvm::GlobalVariable* CreateCStringGlobal(
       const std::string& name,

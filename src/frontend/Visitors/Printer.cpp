@@ -18,7 +18,7 @@ std::string PrintMethodCall(const MethodCall& method_call);
 std::string PrintBlock(const Block& block);
 std::string PrintIfStatement(const IfStatement& if_statement);
 std::string PrintStatementNode(const Statement& statement);
-std::string PrintType(const Type& type);
+std::string PrintType(const Type* type);
 std::string PrintClassDeclarationStatement(const ClassDeclarationStatement& class_declaration);
 
 constexpr int kLogicalOrPrecedence = 1;
@@ -111,18 +111,21 @@ constexpr int GetBinaryPrecedence() {
   }
 }
 
-std::string PrintType(const Type& type) {
+std::string PrintType(const Type* type) {
+  if (type == nullptr) {
+    return "<void>";
+  }
+
   return std::visit(
       Utils::Overload{
           [](const IntType&) -> std::string { return "int"; },
           [](const BoolType&) -> std::string { return "bool"; },
-          [](const ClassType& class_type) -> std::string { return class_type.class_name; },
-          [](const ArrayType& array_type) -> std::string {
-            if (array_type.element_type == nullptr) {
-              return "<invalid>[]";
+          [](const ClassType& class_type) -> std::string {
+            if (class_type.parent == nullptr) {
+              return "<invalid-class>";
             }
 
-            return PrintType(*array_type.element_type) + "[]";
+            return class_type.parent->class_name.name;
           },
           [](const FuncType& func_type) -> std::string {
             std::string result = "func(";
@@ -135,12 +138,12 @@ std::string PrintType(const Type& type) {
             result += ")";
 
             if (func_type.return_type != nullptr) {
-              result += " -> " + PrintType(*func_type.return_type);
+              result += " -> " + PrintType(func_type.return_type);
             }
 
             return result;
           }},
-      type.type);
+      type->type);
 }
 
 int GetPrecedence(const Expression& expression) {
@@ -196,7 +199,7 @@ std::string PrintBinaryExpression(
 }
 
 std::string PrintFunctionCall(const FunctionCall& function_call) {
-  std::string result = function_call.function_name + "(";
+  std::string result = function_call.function_name.name + "(";
 
   for (size_t i = 0; i < function_call.arguments.size(); ++i) {
     assert(function_call.arguments[i] != nullptr);
@@ -205,7 +208,7 @@ std::string PrintFunctionCall(const FunctionCall& function_call) {
         Utils::Overload{
             [](const NamedCallArgument& argument) -> std::string {
               assert(argument.value != nullptr);
-              return argument.name + ": " + PrintExpression(*argument.value);
+              return argument.name.name + ": " + PrintExpression(*argument.value);
             },
             [](const PositionalCallArgument& argument) -> std::string {
               assert(argument.value != nullptr);
@@ -326,12 +329,8 @@ std::string PrintIfStatement(const IfStatement& if_statement) {
 }
 
 std::string PrintDeclarationStatement(const DeclarationStatement& declaration) {
-  std::string result = "var ";
-  if (declaration.is_mutable) {
-    result += "mutable ";
-  }
-
-  result += declaration.variable_name + " " + PrintType(declaration.type);
+            std::string result = "var ";
+  result += declaration.variable_name.name + " " + PrintType(declaration.type);
 
   if (declaration.initializer != nullptr) {
     result += " = " + PrintExpression(*declaration.initializer);
@@ -345,9 +344,9 @@ std::string PrintFunctionDeclarationStatement(
     const FunctionDeclarationStatement& function_declaration) {
   assert(function_declaration.body != nullptr);
 
-  std::string result = "func " + function_declaration.function_name + "(";
+  std::string result = "func " + function_declaration.function_name.name + "(";
   for (size_t i = 0; i < function_declaration.parameters.size(); ++i) {
-    result += function_declaration.parameters[i].name +
+    result += function_declaration.parameters[i].name.name +
               " " +
               PrintType(function_declaration.parameters[i].type);
     if (i + 1 < function_declaration.parameters.size()) {
@@ -356,8 +355,8 @@ std::string PrintFunctionDeclarationStatement(
   }
   result += ")";
 
-  if (function_declaration.return_type.has_value()) {
-    result += " " + PrintType(*function_declaration.return_type);
+  if (function_declaration.GetReturnType() != nullptr) {
+    result += " " + PrintType(function_declaration.GetReturnType());
   }
 
   result += " " + PrintBlock(*function_declaration.body);
@@ -366,7 +365,7 @@ std::string PrintFunctionDeclarationStatement(
 
 std::string PrintAssignmentStatement(const AssignmentStatement& assignment) {
   assert(assignment.expr != nullptr);
-  return assignment.variable_name +
+  return assignment.variable_name.name +
          " = " +
          PrintExpression(*assignment.expr) +
          ";";
@@ -390,9 +389,12 @@ std::string PrintReturnStatement(const ReturnStatement& return_statement) {
 
 std::string PrintClassDeclarationStatement(
     const ClassDeclarationStatement& class_declaration) {
-  std::string result = "class " + class_declaration.class_name;
-  if (class_declaration.base_class_name.has_value()) {
-    result += ":" + *class_declaration.base_class_name;
+  std::string result = "class " + class_declaration.class_name.name;
+  const ClassType* class_type = AsClassType(class_declaration.class_type);
+  if (class_type != nullptr &&
+      class_type->base_class != nullptr &&
+      class_type->base_class->parent != nullptr) {
+    result += ":" + class_type->base_class->parent->class_name.name;
   }
 
   result += " { ";

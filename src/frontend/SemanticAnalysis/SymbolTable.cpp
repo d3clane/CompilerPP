@@ -11,6 +11,55 @@
 
 namespace Parsing {
 
+const ASTNode* SymbolData::GetDeclarationNode() const {
+  if (declaration_ref.node == nullptr) {
+    return nullptr;
+  }
+
+  if (kind == SymbolKind::Parameter) {
+    return declaration_ref.node;
+  }
+
+  const auto* declaration_statement =
+      dynamic_cast<const Statement*>(declaration_ref.node);
+  if (declaration_statement == nullptr) {
+    return declaration_ref.node;
+  }
+
+  return std::visit(
+      Utils::Overload{
+          [](const auto& node) -> const ASTNode* { return &node; }
+      },
+      declaration_statement->value);
+}
+
+SymbolData SymbolData::CreateVariableSymbolData(
+    const DeclarationStatement& declaration,
+    StatementNumerizer::ScopedStmtRef declaration_ref) {
+  return SymbolData{
+      declaration.type,
+      declaration_ref,
+      SymbolKind::Variable};
+}
+
+SymbolData SymbolData::CreateFunctionSymbolData(
+    const FunctionDeclarationStatement& function_declaration,
+    StatementNumerizer::ScopedStmtRef declaration_ref) {
+  return SymbolData{
+      function_declaration.function_type,
+      declaration_ref,
+      SymbolKind::Function};
+}
+
+SymbolData SymbolData::CreateParameterSymbolData(
+    const FunctionParameter& parameter,
+    StatementNumerizer::ScopedStmtRef declaration_ref) {
+  return SymbolData{
+      parameter.type,
+      declaration_ref,
+      SymbolKind::Parameter};
+}
+
 LocalSymbolTable::LocalSymbolTable(LocalSymbolTable* parent)
     : parent_(parent) {}
 
@@ -36,18 +85,20 @@ const SymbolData* LocalSymbolTable::GetVisibleSymbolInParents(
   return nullptr;
 }
 
-LocalSymbolTable::ErrorMsg LocalSymbolTable::AddSymbolInfo(SymbolData symbol_data) {
-  if (GetSymbolInfoInLocalScope(symbol_data.name) != nullptr) {
-    return "Duplicate declaration in the same scope: " + symbol_data.name;
+LocalSymbolTable::ErrorMsg LocalSymbolTable::AddSymbolInfo(
+    const std::string& name,
+    SymbolData symbol_data) {
+  if (GetSymbolInfoInLocalScope(name) != nullptr) {
+    return "Duplicate declaration in the same scope: " + name;
   }
 
-  const SymbolData* visible_parent_symbol = GetVisibleSymbolInParents(symbol_data.name);
+  const SymbolData* visible_parent_symbol = GetVisibleSymbolInParents(name);
   if (visible_parent_symbol != nullptr &&
       !SymbolData::CanBeShadowed(*visible_parent_symbol)) {
-    return "Symbol cannot be shadowed: " + symbol_data.name;
+    return "Symbol cannot be shadowed: " + name;
   }
 
-  symbols_.emplace(symbol_data.name, std::move(symbol_data));
+  symbols_.emplace(name, std::move(symbol_data));
   return {};
 }
 
@@ -64,6 +115,10 @@ void SymbolTable::AddTable(const ASTNode* node, LocalSymbolTable& table) {
   table_by_node_[node] = &table;
 }
 
+void SymbolTable::SetScopeOwner(const ASTNode* owner, LocalSymbolTable& table) {
+  scope_owner_by_table_[&table] = owner;
+}
+
 const LocalSymbolTable* SymbolTable::GetTable(const ASTNode* node) const {
   const auto table_it = table_by_node_.find(node);
   if (table_it == table_by_node_.end()) {
@@ -71,6 +126,29 @@ const LocalSymbolTable* SymbolTable::GetTable(const ASTNode* node) const {
   }
 
   return table_it->second;
+}
+
+const ASTNode* SymbolTable::GetScopeOwner(const LocalSymbolTable* table) const {
+  if (table == nullptr) {
+    return nullptr;
+  }
+
+  const auto owner_it = scope_owner_by_table_.find(table);
+  if (owner_it == scope_owner_by_table_.end()) {
+    return nullptr;
+  }
+
+  return owner_it->second;
+}
+
+const ClassDeclarationStatement* SymbolTable::GetIfClassDeclarationOwner(
+    const LocalSymbolTable* table) const {
+  return dynamic_cast<const ClassDeclarationStatement*>(GetScopeOwner(table));
+}
+
+const FunctionDeclarationStatement* SymbolTable::GetIfFunctionDeclarationOwner(
+    const LocalSymbolTable* table) const {
+  return dynamic_cast<const FunctionDeclarationStatement*>(GetScopeOwner(table));
 }
 
 void SymbolTable::SetStatementNumerizer(StatementNumerizer numerizer) {
@@ -117,7 +195,8 @@ class SymbolTableBuilder {
     return *scope_stack_.back();
   }
 
-  LocalSymbolTable& EnterScope(const ASTNode* owner_node) {
+  template <typename OwnerNode>
+  LocalSymbolTable& EnterScope(const OwnerNode* owner_node) {
     LocalSymbolTable* parent = nullptr;
     if (!scope_stack_.empty()) {
       parent = scope_stack_.back();
@@ -125,6 +204,7 @@ class SymbolTableBuilder {
 
     LocalSymbolTable& table = symbol_table_.CreateLocalTable(parent);
     scope_stack_.push_back(&table);
+    symbol_table_.SetScopeOwner(owner_node, table);
     symbol_table_.AddTable(owner_node, table);
     return table;
   }
@@ -134,16 +214,55 @@ class SymbolTableBuilder {
     scope_stack_.pop_back();
   }
 
+  template <typename OwnerNode>
+  void VisitBlockWithOwner(const Block& block, const OwnerNode* owner_node) {
+    EnterScope(&block);
+    symbol_table_.SetScopeOwner(owner_node, CurrentScope());
+    VisitStatementsInCurrentScope(block.statements);
+    LeaveScope();
+  }
+
   void RegisterNode(const ASTNode* node) {
     symbol_table_.AddTable(node, CurrentScope());
   }
 
-  void TryAddSymbolInfo(const ASTNode* node, SymbolData symbol_data) {
+  void TryAddSymbolInfo(
+      const ASTNode* node,
+      const std::string& symbol_name,
+      SymbolData symbol_data) {
     const LocalSymbolTable::ErrorMsg error_msg =
-        CurrentScope().AddSymbolInfo(std::move(symbol_data));
+        CurrentScope().AddSymbolInfo(symbol_name, std::move(symbol_data));
     if (!error_msg.empty()) {
       debug_ctx_.GetErrors().AddError(node, error_msg);
     }
+  }
+
+  void TryAddVariableSymbolInfo(const DeclarationStatement& declaration) {
+    TryAddSymbolInfo(
+        &declaration,
+        declaration.variable_name.name,
+        SymbolData::CreateVariableSymbolData(
+            declaration,
+            GetNodeRefOrThrow(&declaration)));
+  }
+
+  void TryAddFunctionSymbolInfo(
+      const FunctionDeclarationStatement& function_declaration) {
+    TryAddSymbolInfo(
+        &function_declaration,
+        function_declaration.function_name.name,
+        SymbolData::CreateFunctionSymbolData(
+            function_declaration,
+            GetNodeRefOrThrow(&function_declaration)));
+  }
+
+  void TryAddParameterSymbolInfo(const FunctionParameter& parameter) {
+    TryAddSymbolInfo(
+        &parameter,
+        parameter.name.name,
+        SymbolData::CreateParameterSymbolData(
+            parameter,
+            GetNodeRefOrThrow(&parameter)));
   }
 
   void VisitStatementsInCurrentScope(const List<Statement>& statements) {
@@ -196,31 +315,13 @@ class SymbolTableBuilder {
       VisitExpression(*declaration.initializer);
     }
 
-    TryAddSymbolInfo(
-        &declaration,
-        SymbolData{
-            declaration.type,
-            declaration.variable_name,
-            declaration.is_mutable,
-            SymbolDebugInfo{"variable declaration"},
-            &declaration,
-            GetNodeRefOrThrow(&declaration),
-            SymbolKind::Variable});
+    TryAddVariableSymbolInfo(declaration);
   }
 
   void VisitFunctionDeclarationStatement(
       const FunctionDeclarationStatement& function_declaration) {
     RegisterNode(&function_declaration);
-    TryAddSymbolInfo(
-        &function_declaration,
-        SymbolData{
-            Type{BuildFunctionType(function_declaration)},
-            function_declaration.function_name,
-            false,
-            SymbolDebugInfo{"function declaration"},
-            &function_declaration,
-            GetNodeRefOrThrow(&function_declaration),
-            SymbolKind::Function});
+    TryAddFunctionSymbolInfo(function_declaration);
     VisitFunctionBody(function_declaration);
   }
 
@@ -228,19 +329,11 @@ class SymbolTableBuilder {
     assert(function_declaration.body != nullptr);
 
     EnterScope(function_declaration.body.get());
+    symbol_table_.SetScopeOwner(&function_declaration, CurrentScope());
 
     for (size_t i = 0; i < function_declaration.parameters.size(); ++i) {
       RegisterNode(&function_declaration.parameters[i]);
-      TryAddSymbolInfo(
-          &function_declaration.parameters[i],
-          SymbolData{
-              function_declaration.parameters[i].type,
-              function_declaration.parameters[i].name,
-              false,
-              SymbolDebugInfo{"function parameter"},
-              &function_declaration.parameters[i],
-              GetNodeRefOrThrow(&function_declaration.parameters[i]),
-              SymbolKind::Parameter});
+      TryAddParameterSymbolInfo(function_declaration.parameters[i]);
     }
 
     VisitStatementsInCurrentScope(function_declaration.body->statements);
@@ -286,7 +379,7 @@ class SymbolTableBuilder {
     assert(if_statement.else_tail != nullptr);
 
     VisitExpression(*if_statement.condition);
-    VisitBlock(*if_statement.true_block);
+    VisitBlockWithOwner(*if_statement.true_block, &if_statement);
     VisitElseTail(*if_statement.else_tail);
   }
 
@@ -300,7 +393,7 @@ class SymbolTableBuilder {
     }
 
     if (else_tail.else_block != nullptr) {
-      VisitBlock(*else_tail.else_block);
+      VisitBlockWithOwner(*else_tail.else_block, &else_tail);
     }
   }
 

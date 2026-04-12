@@ -11,34 +11,31 @@
 #include "SemanticAnalysis/Resolver.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "SemanticAnalysis/TypeChecker.hpp"
-#include "SemanticAnalysis/TypeDefiner.hpp"
 #include "TestParseUtils.hpp"
 
 namespace {
 
 std::string LowerSource(const std::string& source) {
   const Parsing::Program program = Parsing::ParseSource(source);
-  const Parsing::TypeDefiner type_definer = Parsing::BuildTypeDefiner(program);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   const Parsing::UseResolver resolver =
       Parsing::BuildUseResolver(program, symbol_table);
-  Parsing::CheckAccessAllowance(program, resolver, type_definer);
-  Parsing::CheckTypes(program, resolver, type_definer);
-  return Parsing::LowerToLLVMIR(program, resolver, type_definer);
+  Parsing::CheckAccessAllowance(program, resolver);
+  Parsing::CheckTypes(program, resolver);
+  return Parsing::LowerToLLVMIR(program, resolver);
 }
 
 void LowerSourceToObjectFile(
     const std::string& source,
     const std::filesystem::path& output_path) {
   const Parsing::Program program = Parsing::ParseSource(source);
-  const Parsing::TypeDefiner type_definer = Parsing::BuildTypeDefiner(program);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   const Parsing::UseResolver resolver =
       Parsing::BuildUseResolver(program, symbol_table);
-  Parsing::CheckAccessAllowance(program, resolver, type_definer);
-  Parsing::CheckTypes(program, resolver, type_definer);
+  Parsing::CheckAccessAllowance(program, resolver);
+  Parsing::CheckTypes(program, resolver);
   Parsing::LLVMIRModule llvm_ir =
-      Parsing::LowerToLLVMIRModule(program, resolver, type_definer);
+      Parsing::LowerToLLVMIRModule(program, resolver);
   Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
 }
 
@@ -46,14 +43,13 @@ void LowerSourceToExecutableFile(
     const std::string& source,
     const std::filesystem::path& output_path) {
   const Parsing::Program program = Parsing::ParseSource(source);
-  const Parsing::TypeDefiner type_definer = Parsing::BuildTypeDefiner(program);
   Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
   const Parsing::UseResolver resolver =
       Parsing::BuildUseResolver(program, symbol_table);
-  Parsing::CheckAccessAllowance(program, resolver, type_definer);
-  Parsing::CheckTypes(program, resolver, type_definer);
+  Parsing::CheckAccessAllowance(program, resolver);
+  Parsing::CheckTypes(program, resolver);
   Parsing::LLVMIRModule llvm_ir =
-      Parsing::LowerToLLVMIRModule(program, resolver, type_definer);
+      Parsing::LowerToLLVMIRModule(program, resolver);
   Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
 }
 

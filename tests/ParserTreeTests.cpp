@@ -40,9 +40,8 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
   const auto* declaration =
       std::get_if<Parsing::DeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(declaration, nullptr);
-  EXPECT_EQ(declaration->variable_name, "x");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(declaration->type.type));
-  EXPECT_FALSE(declaration->is_mutable);
+  EXPECT_EQ(declaration->variable_name.name, "x");
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(declaration->type->type));
   EXPECT_EQ(declaration->initializer, nullptr);
 
   const auto* main_function =
@@ -56,7 +55,7 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
   const auto* assignment =
       std::get_if<Parsing::AssignmentStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(assignment, nullptr);
-  EXPECT_EQ(assignment->variable_name, "x");
+  EXPECT_EQ(assignment->variable_name.name, "x");
   ASSERT_NE(assignment->expr, nullptr);
 
   const auto* assigned_add = GetExpressionNode<Parsing::AddExpression>(assignment->expr);
@@ -348,14 +347,14 @@ TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
   const auto* function_decl =
       std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(function_decl, nullptr);
-  EXPECT_EQ(function_decl->function_name, "foo");
+  EXPECT_EQ(function_decl->function_name.name, "foo");
   ASSERT_EQ(function_decl->parameters.size(), 2);
-  EXPECT_EQ(function_decl->parameters[0].name, "a");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->parameters[0].type.type));
-  EXPECT_EQ(function_decl->parameters[1].name, "b");
-  EXPECT_TRUE(std::holds_alternative<Parsing::BoolType>(function_decl->parameters[1].type.type));
-  ASSERT_TRUE(function_decl->return_type.has_value());
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->return_type->type));
+  EXPECT_EQ(function_decl->parameters[0].name.name, "a");
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->parameters[0].type->type));
+  EXPECT_EQ(function_decl->parameters[1].name.name, "b");
+  EXPECT_TRUE(std::holds_alternative<Parsing::BoolType>(function_decl->parameters[1].type->type));
+  ASSERT_NE(function_decl->GetReturnType(), nullptr);
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->GetReturnType()->type));
   ASSERT_NE(function_decl->body, nullptr);
   ASSERT_EQ(function_decl->body->statements.size(), 1);
 
@@ -382,13 +381,13 @@ TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
 
   const auto* function_call = std::get_if<Parsing::FunctionCall>(&expression_statement->value);
   ASSERT_NE(function_call, nullptr);
-  EXPECT_EQ(function_call->function_name, "foo");
+  EXPECT_EQ(function_call->function_name.name, "foo");
   ASSERT_EQ(function_call->arguments.size(), 2);
 
   const auto* first_named =
       std::get_if<Parsing::NamedCallArgument>(function_call->arguments[0].get());
   ASSERT_NE(first_named, nullptr);
-  EXPECT_EQ(first_named->name, "x");
+  EXPECT_EQ(first_named->name.name, "x");
   ASSERT_NE(first_named->value, nullptr);
 
   const auto* first_named_number =
@@ -401,7 +400,7 @@ TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
   const auto* second_named =
       std::get_if<Parsing::NamedCallArgument>(function_call->arguments[1].get());
   ASSERT_NE(second_named, nullptr);
-  EXPECT_EQ(second_named->name, "y");
+  EXPECT_EQ(second_named->name.name, "y");
   ASSERT_NE(second_named->value, nullptr);
 
   const auto* second_named_bool =
@@ -438,7 +437,7 @@ TEST(ParserTreeTests, ParsesMethodCallExpression) {
       std::get_if<Parsing::MethodCall>(&expression_statement->value);
   ASSERT_NE(method_call, nullptr);
   EXPECT_EQ(method_call->object_name.name, "box");
-  EXPECT_EQ(method_call->function_call.function_name, "get");
+  EXPECT_EQ(method_call->function_call.function_name.name, "get");
   ASSERT_EQ(method_call->function_call.arguments.size(), 1u);
   ASSERT_NE(method_call->function_call.arguments[0], nullptr);
 
@@ -514,7 +513,7 @@ TEST(ParserTreeTests, ParsesDeleteStatement) {
 
 TEST(ParserTreeTests, PrintsProgramInInfixOrder) {
   const std::string source =
-      "var mutable x int = 1 + 2;\n"
+      "var x int = 1 + 2;\n"
       "var flag bool = x > 0 && true;\n"
       "func choose(a int) int { return a; }\n"
       "func main() { if flag { print(x); } else { print(false); } choose(a: x); }\n";
@@ -560,10 +559,10 @@ TEST(ParserTreeTests, ReportsMultipleLexerAndParserErrorsTogether) {
   }
 }
 
-TEST(ParserTreeTests, ParsesClassInheritanceAndArrayFields) {
+TEST(ParserTreeTests, ParsesClassInheritanceAndFields) {
   const std::string source =
       "class Base { var id int; func getId() int { return id; } }\n"
-      "class Derived:Base { var items int[]; var parent Base; func getParent() Base { return parent; } }\n";
+      "class Derived:Base { var count int; var parent Base; func getParent() Base { return parent; } }\n";
 
   const Parsing::Program program = Parsing::ParseSource(source);
 
@@ -574,32 +573,36 @@ TEST(ParserTreeTests, ParsesClassInheritanceAndArrayFields) {
   const auto* base_class =
       std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(base_class, nullptr);
-  EXPECT_EQ(base_class->class_name, "Base");
-  EXPECT_FALSE(base_class->base_class_name.has_value());
+  EXPECT_EQ(base_class->class_name.name, "Base");
+  ASSERT_NE(base_class->class_type, nullptr);
+  const auto* base_class_type = Parsing::AsClassType(base_class->class_type);
+  ASSERT_NE(base_class_type, nullptr);
+  EXPECT_EQ(base_class_type->base_class, nullptr);
   ASSERT_EQ(base_class->fields.size(), 1u);
   ASSERT_EQ(base_class->methods.size(), 1u);
-  EXPECT_EQ(base_class->fields[0].variable_name, "id");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(base_class->fields[0].type.type));
+  EXPECT_EQ(base_class->fields[0].variable_name.name, "id");
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(base_class->fields[0].type->type));
 
   const auto* derived_class =
       std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
   ASSERT_NE(derived_class, nullptr);
-  EXPECT_EQ(derived_class->class_name, "Derived");
-  ASSERT_TRUE(derived_class->base_class_name.has_value());
-  EXPECT_EQ(*derived_class->base_class_name, "Base");
+  EXPECT_EQ(derived_class->class_name.name, "Derived");
+  ASSERT_NE(derived_class->class_type, nullptr);
+  const auto* derived_class_type = Parsing::AsClassType(derived_class->class_type);
+  ASSERT_NE(derived_class_type, nullptr);
+  ASSERT_NE(derived_class_type->base_class, nullptr);
+  ASSERT_NE(derived_class_type->base_class->parent, nullptr);
+  EXPECT_EQ(derived_class_type->base_class->parent->class_name.name, "Base");
   ASSERT_EQ(derived_class->fields.size(), 2u);
   ASSERT_EQ(derived_class->methods.size(), 1u);
 
-  const auto* array_type =
-      std::get_if<Parsing::ArrayType>(&derived_class->fields[0].type.type);
-  ASSERT_NE(array_type, nullptr);
-  ASSERT_NE(array_type->element_type, nullptr);
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(array_type->element_type->type));
+  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(derived_class->fields[0].type->type));
 
   const auto* class_type =
-      std::get_if<Parsing::ClassType>(&derived_class->fields[1].type.type);
+      std::get_if<Parsing::ClassType>(&derived_class->fields[1].type->type);
   ASSERT_NE(class_type, nullptr);
-  EXPECT_EQ(class_type->class_name, "Base");
+  ASSERT_NE(class_type->parent, nullptr);
+  EXPECT_EQ(class_type->parent->class_name.name, "Base");
 }
 
 TEST(ParserTreeTests, RejectsClassBodyWithMethodBeforeField) {

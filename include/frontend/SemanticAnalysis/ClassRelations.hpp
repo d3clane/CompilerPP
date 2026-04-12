@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "Parsing/Ast.hpp"
-#include "SemanticAnalysis/TypeDefiner.hpp"
 
 namespace Parsing {
 
@@ -40,7 +39,6 @@ class ClassRelations {
 
   friend ClassRelations BuildClassRelations(
       const Program& program,
-      const TypeDefiner& type_definer,
       DebugCtx& debug_ctx);
   friend class ClassRelationsVisitor;
   friend class ClassRelationsBuilder;
@@ -48,10 +46,8 @@ class ClassRelations {
 
 ClassRelations BuildClassRelations(
     const Program& program,
-    const TypeDefiner& type_definer,
     DebugCtx& debug_ctx);
 ClassRelations BuildClassRelations(
-    const Program& program,
-    const TypeDefiner& type_definer);
+    const Program& program);
 
 }  // namespace Parsing

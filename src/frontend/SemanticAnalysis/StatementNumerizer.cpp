@@ -19,15 +19,6 @@ std::optional<StatementNumerizer::ScopedStmtRef> StatementNumerizer::GetRef(
   return ref_it->second;
 }
 
-const ASTNode* StatementNumerizer::GetScopeOwnerFromRef(
-    const ScopedStmtRef& ref) const {
-  if (ref.parent_node == nullptr) {
-    return nullptr;
-  }
-
-  return ref.parent_node;
-}
-
 std::optional<StatementNumerizer::ScopedStmtRef> StatementNumerizer::ProjectUseToScope(
     ScopedStmtRef use_ref,
     const ASTNode* target_scope_owner) const {
