@@ -1,7 +1,5 @@
 #include "Parsing/Types.hpp"
 
-#include <algorithm>
-
 #include "Parsing/Ast.hpp"
 
 namespace Parsing {

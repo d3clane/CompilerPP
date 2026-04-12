@@ -5,6 +5,28 @@
 
 namespace Parsing {
 
+ClassMemberLookupResult ClassMemberLookupResult::CreateFieldResult(
+    const ClassDeclarationStatement& declaring_class,
+    const DeclarationStatement& field_declaration) {
+  return ClassMemberLookupResult{
+      .kind = ClassMemberKind::Field,
+      .declaring_class = &declaring_class,
+      .field_declaration = &field_declaration,
+      .method_declaration = nullptr,
+      .type = field_declaration.type};
+}
+
+ClassMemberLookupResult ClassMemberLookupResult::CreateMethodResult(
+    const ClassDeclarationStatement& declaring_class,
+    const FunctionDeclarationStatement& method_declaration) {
+  return ClassMemberLookupResult{
+      .kind = ClassMemberKind::Method,
+      .declaring_class = &declaring_class,
+      .field_declaration = nullptr,
+      .method_declaration = &method_declaration,
+      .type = method_declaration.function_type};
+}
+
 std::optional<ClassMemberLookupResult> LookupClassMember(
     const ClassType& start_class,
     const std::string& member_name,
@@ -20,21 +42,13 @@ std::optional<ClassMemberLookupResult> LookupClassMember(
 
     for (const DeclarationStatement& field : current_class_decl->fields) {
       if (field.variable_name.name == member_name) {
-        return ClassMemberLookupResult{
-            .kind = ClassMemberKind::Field,
-            .declaring_class = current_class_decl,
-            .field_declaration = &field,
-            .type = field.type};
+        return ClassMemberLookupResult::CreateFieldResult(*current_class_decl, field);
       }
     }
 
     for (const FunctionDeclarationStatement& method : current_class_decl->methods) {
       if (method.function_name.name == member_name) {
-        return ClassMemberLookupResult{
-            .kind = ClassMemberKind::Method,
-            .declaring_class = current_class_decl,
-            .method_declaration = &method,
-            .type = method.function_type};
+        return ClassMemberLookupResult::CreateMethodResult(*current_class_decl, method);
       }
     }
 

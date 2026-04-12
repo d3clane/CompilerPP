@@ -23,6 +23,13 @@ struct ClassMemberLookupResult {
   const DeclarationStatement* field_declaration = nullptr;
   const FunctionDeclarationStatement* method_declaration = nullptr;
   const Type* type = nullptr;
+
+  static ClassMemberLookupResult CreateFieldResult(
+      const ClassDeclarationStatement& declaring_class,
+      const DeclarationStatement& field_declaration);
+  static ClassMemberLookupResult CreateMethodResult(
+      const ClassDeclarationStatement& declaring_class,
+      const FunctionDeclarationStatement& method_declaration);
 };
 
 std::optional<ClassMemberLookupResult> LookupClassMember(
