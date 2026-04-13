@@ -1,31 +1,38 @@
 #include "Lowering/ExecutableLowering.hpp"
 
 #include <cstdlib>
+#include <iostream>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-#include <lld/Common/Driver.h>
 #include <llvm/ADT/SmallString.h>
 #include <llvm/ADT/StringRef.h>
 #include <llvm/IR/Module.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/FileUtilities.h>
-#include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/Program.h>
-#include <llvm/Support/VersionTuple.h>
 #include <llvm/Support/raw_ostream.h>
-#include <llvm/TargetParser/Triple.h>
 
 #include "Lowering/ObjectFileLowering.hpp"
-#include "llvm/Support/ErrorHandling.h"
 
+#if defined(__APPLE__)
+#include <lld/Common/Driver.h>
+#include <llvm/Support/ErrorHandling.h>
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/VersionTuple.h>
+#include <llvm/TargetParser/Triple.h>
+#endif
+
+#if defined(__APPLE__)
 LLD_HAS_DRIVER(macho)
+#endif
 
 namespace Parsing {
 namespace {
 
+#if defined(__APPLE__)
 std::string ReadFileTrimmed(llvm::StringRef path) {
   auto buffer_or_error = llvm::MemoryBuffer::getFile(path);
   assert(buffer_or_error);
@@ -87,18 +94,11 @@ std::string RunXcrun(std::initializer_list<llvm::StringRef> extra_args) {
   assert(!execution_failed);
   assert(return_code == 0);
 
-  const std::string stdout_text = ReadFileTrimmed(stdout_path);
-  const std::string stderr_text = ReadFileTrimmed(stderr_path);
-  
-  return stdout_text;
-}
-
-bool HasUsableSdkRootEnv() {
-  return std::getenv("SDKROOT") != nullptr;
+  return ReadFileTrimmed(stdout_path);;
 }
 
 std::string QueryMacOSSdk(llvm::StringRef query_flag) {
-  if (HasUsableSdkRootEnv()) {
+  if (std::getenv("SDKROOT") != nullptr) {
     return RunXcrun({query_flag});
   }
   return RunXcrun({"--sdk", "macosx", query_flag});
@@ -150,10 +150,6 @@ bool LinkMachOExecutable(
     const std::string& object_path,
     const std::string& output_path,
     const llvm::Triple& target_triple) {
-  if (!target_triple.isOSDarwin()) {
-    return false;
-  }
-
   const std::vector<std::string> arg_storage =
       BuildMachOArgs(object_path, output_path, target_triple);
 
@@ -174,10 +170,54 @@ bool LinkMachOExecutable(
       stderr_stream,
       {{lld::Darwin, &lld::macho::link}});
 
-  assert(result.retCode == 0);
-
   stdout_stream.flush();
   stderr_stream.flush();
+  assert(result.retCode == 0);
+
+  return true;
+}
+#endif
+
+bool LinkExecutableWithClang(
+    const std::string& object_path,
+    const std::string& output_path) {
+  auto clang = llvm::sys::findProgramByName("clang");
+  if (!clang) {
+    return false;
+  }
+
+  const std::string& clang_path = *clang;
+  std::vector<std::string> owned_args{
+      clang_path,
+      object_path,
+      "-o",
+      output_path,
+  };
+  std::vector<llvm::StringRef> args;
+  args.reserve(owned_args.size());
+  for (const std::string& arg : owned_args) {
+    args.push_back(arg);
+  }
+
+  std::optional<llvm::StringRef> redirects[] = {
+      std::nullopt,
+      std::nullopt,
+      std::nullopt,
+  };
+  std::string err_msg;
+  bool execution_failed = false;
+  const int return_code = llvm::sys::ExecuteAndWait(
+      clang_path,
+      args,
+      std::nullopt,
+      redirects,
+      /*SecondsToWait=*/0,
+      /*MemoryLimit=*/0,
+      &err_msg,
+      &execution_failed);
+  assert(!execution_failed);
+  assert(return_code == 0);
+  (void)err_msg;
 
   return true;
 }
@@ -197,12 +237,25 @@ void LowerToExecutableFile(
   llvm::FileRemover cleanup(object_path);
 
   LowerToObjectFile(module, object_path.str().str());
-  bool res = LinkMachOExecutable(
-      object_path.str().str(),
-      output_path,
-      llvm::Triple(module.getTargetTriple()));
+#if defined(__APPLE__)
+  const llvm::Triple target_triple(module.getTargetTriple());
+  if (LinkMachOExecutable(
+          object_path.str().str(),
+          output_path,
+          target_triple)) {
+    return;
+  }
+#else
+  if (LinkExecutableWithClang(
+          object_path.str().str(),
+          output_path)) {
+    return;
+  }
 
-  assert(res);
+  std::cerr << "clang is required for linking on this platform\n."
+               "Use --emit-object to generate object file (mentioned in usage)\n"
+               "and then link by yourself\n";
+#endif
 }
 
 }  // namespace Parsing
