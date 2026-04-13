@@ -6,7 +6,7 @@
 #include <utility>
 #include <vector>
 
-namespace Parsing {
+namespace Front {
 
 class ASTNode;
 
@@ -40,4 +40,4 @@ DebugInfo CreateDebugInfo(
     std::pair<size_t, size_t> code_range = {0, 0},
     std::vector<std::pair<size_t, size_t>> stressed_chars = {});
 
-}  // namespace Parsing
+}  // namespace Front

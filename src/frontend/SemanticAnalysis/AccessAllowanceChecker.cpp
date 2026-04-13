@@ -8,7 +8,7 @@
 #include "Utils/ClassMemberLookup.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 namespace {
 
@@ -251,4 +251,4 @@ void CheckAccessAllowance(
   }
 }
 
-}  // namespace Parsing
+}  // namespace Front

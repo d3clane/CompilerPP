@@ -6,7 +6,7 @@
 #include "Debug/DebugCtx.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class FunctionRelationsVisitor {
  public:
@@ -170,4 +170,4 @@ FunctionRelations BuildFunctionRelations(const Program& program) {
   return BuildFunctionRelations(program, debug_ctx);
 }
 
-}  // namespace Parsing
+}  // namespace Front

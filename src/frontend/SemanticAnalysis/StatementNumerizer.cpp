@@ -7,7 +7,7 @@
 
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 std::optional<StatementNumerizer::ScopedStmtRef> StatementNumerizer::GetRef(
     const ASTNode* node) const {
@@ -330,4 +330,4 @@ StatementNumerizer BuildStatementNumerizer(const Program& program) {
   return builder.Build(program);
 }
 
-}  // namespace Parsing
+}  // namespace Front

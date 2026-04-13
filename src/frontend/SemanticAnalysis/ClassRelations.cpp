@@ -9,7 +9,7 @@
 #include "Debug/DebugCtx.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class ClassRelationsVisitor {
  public:
@@ -274,4 +274,4 @@ ClassRelations BuildClassRelations(
   return relations;
 }
 
-}  // namespace Parsing
+}  // namespace Front

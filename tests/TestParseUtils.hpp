@@ -7,7 +7,7 @@
 #include "Parsing/Parser.hpp"
 #include "Tokenizing/Lexer.hpp"
 
-namespace Parsing {
+namespace Front {
 
 inline Program ParseSource(
     const std::string& source,
@@ -33,4 +33,4 @@ inline Program ParseSource(
   return program;
 }
 
-}  // namespace Parsing
+}  // namespace Front

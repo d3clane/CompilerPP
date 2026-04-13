@@ -5,7 +5,7 @@
 #include "Parsing/Ast.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class DebugCtx;
 
@@ -79,4 +79,4 @@ void CheckTypes(
     const Program& program,
     const UseResolver& use_resolver);
 
-}  // namespace Parsing
+}  // namespace Front

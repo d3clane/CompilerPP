@@ -2,12 +2,12 @@
 %language "c++"
 
 %defines
-%define api.namespace {Parsing}
+%define api.namespace {Front}
 %define api.parser.class {BisonParser}
 %define api.value.type variant
 %define api.token.constructor
 %define parse.error detailed
-%define api.location.type {Parsing::TokenLocation}
+%define api.location.type {Front::TokenLocation}
 %locations
 
 %code requires {
@@ -23,7 +23,7 @@
 #include "Parsing/Ast.hpp"
 #include "Tokenizing/Tokens.hpp"
 
-namespace Parsing {
+namespace Front {
 
 struct TokenLocation {
   size_t begin_token_idx = 0;
@@ -48,7 +48,7 @@ struct ParserState {
   std::vector<PendingErrorState> pending_errors;
 };
 
-}  // namespace Parsing
+}  // namespace Front
 
 #define YYLLOC_DEFAULT(Current, Rhs, N)                                     \
   do {                                                                      \
@@ -73,7 +73,7 @@ struct ParserState {
 
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 BisonParser::symbol_type yylex(ParserState& state);
 
@@ -340,7 +340,7 @@ void AddPendingParseErrorUntilBlockBegin(ParserState& state) {
                                   context_begin, context_end);
 }
 
-}  // namespace Parsing
+}  // namespace Front
 }
 
 %parse-param { ParserState& state }
@@ -946,7 +946,7 @@ final_expr:
 
 %%
 
-namespace Parsing {
+namespace Front {
 
 BisonParser::symbol_type yylex(ParserState& state) {
   if (state.current_index >= state.tokens.size()) {
@@ -1092,4 +1092,4 @@ void BisonParser::error(
   });
 }
 
-}  // namespace Parsing
+}  // namespace Front

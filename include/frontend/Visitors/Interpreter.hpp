@@ -6,7 +6,7 @@
 
 #include "Parsing/Ast.hpp"
 
-namespace Parsing {
+namespace Front {
 
 using RuntimeValue = std::variant<int, bool>;
 
@@ -17,4 +17,4 @@ struct InterpreterContext {
 InterpreterContext Interpret(const Program& program, std::ostream& output);
 InterpreterContext Interpret(const Program& program);
 
-}  // namespace Parsing
+}  // namespace Front

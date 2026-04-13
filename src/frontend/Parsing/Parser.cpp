@@ -10,7 +10,7 @@
 #include "Debug/DebugCtx.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 namespace {
 
@@ -363,4 +363,4 @@ Program ParseTokens(
   return ParseTokensImpl(tokens, debug_ctx, token_debug_infos, input_size);
 }
 
-}  // namespace Parsing
+}  // namespace Front

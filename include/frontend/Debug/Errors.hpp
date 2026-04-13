@@ -6,7 +6,7 @@
 
 #include "Debug/Debug.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class FrontendErrors {
  public:
@@ -33,4 +33,4 @@ class FrontendErrors {
   size_t limit_ = static_cast<size_t>(-1);
 };
 
-}  // namespace Parsing
+}  // namespace Front

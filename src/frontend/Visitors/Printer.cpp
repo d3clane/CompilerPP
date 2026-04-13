@@ -4,7 +4,7 @@
 
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 namespace {
 
 std::string PrintExpression(const Expression& expression);
@@ -460,4 +460,4 @@ std::string PrintInfix(const Program& program) {
   return result;
 }
 
-}  // namespace Parsing
+}  // namespace Front

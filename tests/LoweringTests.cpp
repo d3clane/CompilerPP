@@ -16,41 +16,41 @@
 namespace {
 
 std::string LowerSource(const std::string& source) {
-  const Parsing::Program program = Parsing::ParseSource(source);
-  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
-  const Parsing::UseResolver resolver =
-      Parsing::BuildUseResolver(program, symbol_table);
-  Parsing::CheckAccessAllowance(program, resolver);
-  Parsing::CheckTypes(program, resolver);
-  return Parsing::LowerToLLVMIR(program, resolver);
+  const Front::Program program = Front::ParseSource(source);
+  Front::SymbolTable symbol_table = Front::BuildSymbolTable(program);
+  const Front::UseResolver resolver =
+      Front::BuildUseResolver(program, symbol_table);
+  Front::CheckAccessAllowance(program, resolver);
+  Front::CheckTypes(program, resolver);
+  return Front::LowerToLLVMIR(program, resolver);
 }
 
 void LowerSourceToObjectFile(
     const std::string& source,
     const std::filesystem::path& output_path) {
-  const Parsing::Program program = Parsing::ParseSource(source);
-  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
-  const Parsing::UseResolver resolver =
-      Parsing::BuildUseResolver(program, symbol_table);
-  Parsing::CheckAccessAllowance(program, resolver);
-  Parsing::CheckTypes(program, resolver);
-  Parsing::LLVMIRModule llvm_ir =
-      Parsing::LowerToLLVMIRModule(program, resolver);
-  Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+  const Front::Program program = Front::ParseSource(source);
+  Front::SymbolTable symbol_table = Front::BuildSymbolTable(program);
+  const Front::UseResolver resolver =
+      Front::BuildUseResolver(program, symbol_table);
+  Front::CheckAccessAllowance(program, resolver);
+  Front::CheckTypes(program, resolver);
+  Front::LLVMIRModule llvm_ir =
+      Front::LowerToLLVMIRModule(program, resolver);
+  Front::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
 }
 
 void LowerSourceToExecutableFile(
     const std::string& source,
     const std::filesystem::path& output_path) {
-  const Parsing::Program program = Parsing::ParseSource(source);
-  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
-  const Parsing::UseResolver resolver =
-      Parsing::BuildUseResolver(program, symbol_table);
-  Parsing::CheckAccessAllowance(program, resolver);
-  Parsing::CheckTypes(program, resolver);
-  Parsing::LLVMIRModule llvm_ir =
-      Parsing::LowerToLLVMIRModule(program, resolver);
-  Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
+  const Front::Program program = Front::ParseSource(source);
+  Front::SymbolTable symbol_table = Front::BuildSymbolTable(program);
+  const Front::UseResolver resolver =
+      Front::BuildUseResolver(program, symbol_table);
+  Front::CheckAccessAllowance(program, resolver);
+  Front::CheckTypes(program, resolver);
+  Front::LLVMIRModule llvm_ir =
+      Front::LowerToLLVMIRModule(program, resolver);
+  Front::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
 }
 
 TEST(LoweringTests, LowersDerivedLayoutWithEmbeddedBaseAndAllocator) {

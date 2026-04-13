@@ -3,7 +3,7 @@
 #include <cassert>
 #include <set>
 
-namespace Parsing {
+namespace Front {
 
 ClassMemberLookupResult ClassMemberLookupResult::CreateFieldResult(
     const ClassDeclarationStatement& declaring_class,
@@ -72,4 +72,4 @@ std::optional<ClassMemberLookupResult> LookupClassMember(
   return std::nullopt;
 }
 
-}  // namespace Parsing
+}  // namespace Front

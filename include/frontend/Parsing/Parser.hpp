@@ -8,7 +8,7 @@
 #include "Parsing/Ast.hpp"
 #include "Tokenizing/Tokens.hpp"
 
-namespace Parsing {
+namespace Front {
 
 Program ParseTokens(
     const std::vector<Tokenizing::TokenVariant>& tokens,
@@ -16,4 +16,4 @@ Program ParseTokens(
     const std::vector<DebugInfo>* token_debug_infos = nullptr,
     size_t input_size = 0);
 
-}  // namespace Parsing
+}  // namespace Front

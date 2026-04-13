@@ -11,7 +11,7 @@
 
 #include "Parsing/Types.hpp"
 
-namespace Parsing {
+namespace Front {
 
 #define ADD_OPERATOR_EQUAL(type) \
   friend bool operator==(const type& left, const type& right) = default;
@@ -512,4 +512,4 @@ struct Program : ASTNode {
 
 #undef ADD_OPERATOR_EQUAL
 
-}  // namespace Parsing
+}  // namespace Front

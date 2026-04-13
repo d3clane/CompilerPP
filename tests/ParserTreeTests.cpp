@@ -10,7 +10,7 @@
 namespace {
 
 template <typename T>
-const T* GetExpressionNode(const std::unique_ptr<Parsing::Expression>& expression) {
+const T* GetExpressionNode(const std::unique_ptr<Front::Expression>& expression) {
   if (expression == nullptr) {
     return nullptr;
   }
@@ -18,8 +18,8 @@ const T* GetExpressionNode(const std::unique_ptr<Parsing::Expression>& expressio
   return std::get_if<T>(&expression->value);
 }
 
-const int* GetIntLiteralValue(const std::unique_ptr<Parsing::Expression>& expression) {
-  const auto* literal = GetExpressionNode<Parsing::LiteralExpression>(expression);
+const int* GetIntLiteralValue(const std::unique_ptr<Front::Expression>& expression) {
+  const auto* literal = GetExpressionNode<Front::LiteralExpression>(expression);
   if (literal == nullptr) {
     return nullptr;
   }
@@ -31,21 +31,21 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
       "var x int;\n"
       "func main() { x = -7 + 2 * 3; print(x - 1); }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 2);
   ASSERT_NE(program.top_statements[0], nullptr);
   ASSERT_NE(program.top_statements[1], nullptr);
 
   const auto* declaration =
-      std::get_if<Parsing::DeclarationStatement>(&program.top_statements[0]->value);
+      std::get_if<Front::DeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(declaration, nullptr);
   EXPECT_EQ(declaration->variable_name.name, "x");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(declaration->type->type));
+  EXPECT_TRUE(std::holds_alternative<Front::IntType>(declaration->type->type));
   EXPECT_EQ(declaration->initializer, nullptr);
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[1]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 2u);
@@ -53,58 +53,58 @@ TEST(ParserTreeTests, ParsesIntDeclarationAssignmentAndPrint) {
   ASSERT_NE(main_function->body->statements[1], nullptr);
 
   const auto* assignment =
-      std::get_if<Parsing::AssignmentStatement>(&main_function->body->statements[0]->value);
+      std::get_if<Front::AssignmentStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(assignment, nullptr);
   EXPECT_EQ(assignment->variable_name.name, "x");
   ASSERT_NE(assignment->expr, nullptr);
 
-  const auto* assigned_add = GetExpressionNode<Parsing::AddExpression>(assignment->expr);
+  const auto* assigned_add = GetExpressionNode<Front::AddExpression>(assignment->expr);
   ASSERT_NE(assigned_add, nullptr);
   ASSERT_NE(assigned_add->left, nullptr);
   ASSERT_NE(assigned_add->right, nullptr);
 
-  const auto* unary_minus = GetExpressionNode<Parsing::UnaryMinusExpression>(assigned_add->left);
+  const auto* unary_minus = GetExpressionNode<Front::UnaryMinusExpression>(assigned_add->left);
   ASSERT_NE(unary_minus, nullptr);
   ASSERT_NE(unary_minus->operand, nullptr);
-  const auto* unary_operand = GetExpressionNode<Parsing::LiteralExpression>(unary_minus->operand);
+  const auto* unary_operand = GetExpressionNode<Front::LiteralExpression>(unary_minus->operand);
   ASSERT_NE(unary_operand, nullptr);
   const auto* unary_operand_value = std::get_if<int>(&unary_operand->value);
   ASSERT_NE(unary_operand_value, nullptr);
   EXPECT_EQ(*unary_operand_value, 7);
 
-  const auto* multiply = GetExpressionNode<Parsing::MultiplyExpression>(assigned_add->right);
+  const auto* multiply = GetExpressionNode<Front::MultiplyExpression>(assigned_add->right);
   ASSERT_NE(multiply, nullptr);
   ASSERT_NE(multiply->left, nullptr);
   ASSERT_NE(multiply->right, nullptr);
 
-  const auto* multiply_left = GetExpressionNode<Parsing::LiteralExpression>(multiply->left);
+  const auto* multiply_left = GetExpressionNode<Front::LiteralExpression>(multiply->left);
   ASSERT_NE(multiply_left, nullptr);
   const auto* multiply_left_value = std::get_if<int>(&multiply_left->value);
   ASSERT_NE(multiply_left_value, nullptr);
   EXPECT_EQ(*multiply_left_value, 2);
 
-  const auto* multiply_right = GetExpressionNode<Parsing::LiteralExpression>(multiply->right);
+  const auto* multiply_right = GetExpressionNode<Front::LiteralExpression>(multiply->right);
   ASSERT_NE(multiply_right, nullptr);
   const auto* multiply_right_value = std::get_if<int>(&multiply_right->value);
   ASSERT_NE(multiply_right_value, nullptr);
   EXPECT_EQ(*multiply_right_value, 3);
 
   const auto* print_statement =
-      std::get_if<Parsing::PrintStatement>(&main_function->body->statements[1]->value);
+      std::get_if<Front::PrintStatement>(&main_function->body->statements[1]->value);
   ASSERT_NE(print_statement, nullptr);
   ASSERT_NE(print_statement->expr, nullptr);
 
   const auto* print_subtract =
-      GetExpressionNode<Parsing::SubtractExpression>(print_statement->expr);
+      GetExpressionNode<Front::SubtractExpression>(print_statement->expr);
   ASSERT_NE(print_subtract, nullptr);
   ASSERT_NE(print_subtract->left, nullptr);
   ASSERT_NE(print_subtract->right, nullptr);
 
-  const auto* printed_identifier = GetExpressionNode<Parsing::IdentifierExpression>(print_subtract->left);
+  const auto* printed_identifier = GetExpressionNode<Front::IdentifierExpression>(print_subtract->left);
   ASSERT_NE(printed_identifier, nullptr);
   EXPECT_EQ(printed_identifier->name, "x");
 
-  const auto* printed_number = GetExpressionNode<Parsing::LiteralExpression>(print_subtract->right);
+  const auto* printed_number = GetExpressionNode<Front::LiteralExpression>(print_subtract->right);
   ASSERT_NE(printed_number, nullptr);
   const auto* printed_number_value = std::get_if<int>(&printed_number->value);
   ASSERT_NE(printed_number_value, nullptr);
@@ -116,51 +116,51 @@ TEST(ParserTreeTests, ParsesLogicalIfTree) {
       "var flag bool = true;\n"
       "func main() { if !flag || 1 < 2 && flag { print(flag); } else { print(false); } }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 2);
   ASSERT_NE(program.top_statements[1], nullptr);
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[1]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1u);
   ASSERT_NE(main_function->body->statements[0], nullptr);
 
   const auto* if_statement =
-      std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
+      std::get_if<Front::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(if_statement, nullptr);
   ASSERT_NE(if_statement->condition, nullptr);
   ASSERT_NE(if_statement->true_block, nullptr);
   ASSERT_NE(if_statement->else_tail, nullptr);
 
-  const auto* condition_or = GetExpressionNode<Parsing::LogicalOrExpression>(if_statement->condition);
+  const auto* condition_or = GetExpressionNode<Front::LogicalOrExpression>(if_statement->condition);
   ASSERT_NE(condition_or, nullptr);
   ASSERT_NE(condition_or->left, nullptr);
   ASSERT_NE(condition_or->right, nullptr);
 
-  const auto* left_not = GetExpressionNode<Parsing::UnaryNotExpression>(condition_or->left);
+  const auto* left_not = GetExpressionNode<Front::UnaryNotExpression>(condition_or->left);
   ASSERT_NE(left_not, nullptr);
   ASSERT_NE(left_not->operand, nullptr);
 
   const auto* negated_identifier =
-      GetExpressionNode<Parsing::IdentifierExpression>(left_not->operand);
+      GetExpressionNode<Front::IdentifierExpression>(left_not->operand);
   ASSERT_NE(negated_identifier, nullptr);
   EXPECT_EQ(negated_identifier->name, "flag");
 
-  const auto* right_and = GetExpressionNode<Parsing::LogicalAndExpression>(condition_or->right);
+  const auto* right_and = GetExpressionNode<Front::LogicalAndExpression>(condition_or->right);
   ASSERT_NE(right_and, nullptr);
   ASSERT_NE(right_and->left, nullptr);
   ASSERT_NE(right_and->right, nullptr);
 
-  const auto* comparison = GetExpressionNode<Parsing::LessExpression>(right_and->left);
+  const auto* comparison = GetExpressionNode<Front::LessExpression>(right_and->left);
   ASSERT_NE(comparison, nullptr);
   ASSERT_NE(comparison->left, nullptr);
   ASSERT_NE(comparison->right, nullptr);
 
   const auto* right_identifier =
-      GetExpressionNode<Parsing::IdentifierExpression>(right_and->right);
+      GetExpressionNode<Front::IdentifierExpression>(right_and->right);
   ASSERT_NE(right_identifier, nullptr);
   EXPECT_EQ(right_identifier->name, "flag");
 }
@@ -169,44 +169,44 @@ TEST(ParserTreeTests, ParsesComplexIfTreeWithBlocksAndCondition) {
   const std::string source =
       "func main() { if (x + 1) * 2 >= y % 3 { print(x + y); x = x - 1; } else { print(0); } }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 1);
   ASSERT_NE(program.top_statements[0], nullptr);
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1u);
   ASSERT_NE(main_function->body->statements[0], nullptr);
 
   const auto* if_statement =
-      std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
+      std::get_if<Front::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(if_statement, nullptr);
   ASSERT_NE(if_statement->condition, nullptr);
   ASSERT_NE(if_statement->true_block, nullptr);
   ASSERT_NE(if_statement->else_tail, nullptr);
 
   const auto* comparison =
-      GetExpressionNode<Parsing::GreaterEqualExpression>(if_statement->condition);
+      GetExpressionNode<Front::GreaterEqualExpression>(if_statement->condition);
   ASSERT_NE(comparison, nullptr);
   ASSERT_NE(comparison->left, nullptr);
   ASSERT_NE(comparison->right, nullptr);
 
   const auto* left_multiply =
-      GetExpressionNode<Parsing::MultiplyExpression>(comparison->left);
+      GetExpressionNode<Front::MultiplyExpression>(comparison->left);
   ASSERT_NE(left_multiply, nullptr);
   ASSERT_NE(left_multiply->left, nullptr);
   ASSERT_NE(left_multiply->right, nullptr);
 
-  const auto* left_add = GetExpressionNode<Parsing::AddExpression>(left_multiply->left);
+  const auto* left_add = GetExpressionNode<Front::AddExpression>(left_multiply->left);
   ASSERT_NE(left_add, nullptr);
   ASSERT_NE(left_add->left, nullptr);
   ASSERT_NE(left_add->right, nullptr);
 
   const auto* add_identifier =
-      GetExpressionNode<Parsing::IdentifierExpression>(left_add->left);
+      GetExpressionNode<Front::IdentifierExpression>(left_add->left);
   ASSERT_NE(add_identifier, nullptr);
   EXPECT_EQ(add_identifier->name, "x");
 
@@ -218,13 +218,13 @@ TEST(ParserTreeTests, ParsesComplexIfTreeWithBlocksAndCondition) {
   ASSERT_NE(multiply_right_value, nullptr);
   EXPECT_EQ(*multiply_right_value, 2);
 
-  const auto* right_modulo = GetExpressionNode<Parsing::ModuloExpression>(comparison->right);
+  const auto* right_modulo = GetExpressionNode<Front::ModuloExpression>(comparison->right);
   ASSERT_NE(right_modulo, nullptr);
   ASSERT_NE(right_modulo->left, nullptr);
   ASSERT_NE(right_modulo->right, nullptr);
 
   const auto* modulo_left =
-      GetExpressionNode<Parsing::IdentifierExpression>(right_modulo->left);
+      GetExpressionNode<Front::IdentifierExpression>(right_modulo->left);
   ASSERT_NE(modulo_left, nullptr);
   EXPECT_EQ(modulo_left->name, "y");
 
@@ -242,19 +242,19 @@ TEST(ParserTreeTests, ParsesElseIfChainTree) {
   const std::string source =
       "func main() { if x < 0 { print(0); } else if x < 10 { print(1); } else if x < 20 { print(2); } else { print(3); } }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 1);
   ASSERT_NE(program.top_statements[0], nullptr);
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1u);
   ASSERT_NE(main_function->body->statements[0], nullptr);
 
-  const auto* first_if = std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
+  const auto* first_if = std::get_if<Front::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(first_if, nullptr);
   ASSERT_NE(first_if->condition, nullptr);
   ASSERT_NE(first_if->true_block, nullptr);
@@ -262,7 +262,7 @@ TEST(ParserTreeTests, ParsesElseIfChainTree) {
   ASSERT_NE(first_if->else_tail->else_if, nullptr);
   ASSERT_EQ(first_if->else_tail->else_block, nullptr);
 
-  const auto* first_condition = GetExpressionNode<Parsing::LessExpression>(first_if->condition);
+  const auto* first_condition = GetExpressionNode<Front::LessExpression>(first_if->condition);
   ASSERT_NE(first_condition, nullptr);
   const int* first_condition_right = GetIntLiteralValue(first_condition->right);
   ASSERT_NE(first_condition_right, nullptr);
@@ -277,7 +277,7 @@ TEST(ParserTreeTests, ParsesElseIfChainTree) {
   ASSERT_EQ(second_if->else_tail->else_block, nullptr);
 
   const auto* second_condition =
-      GetExpressionNode<Parsing::LessExpression>(second_if->condition);
+      GetExpressionNode<Front::LessExpression>(second_if->condition);
   ASSERT_NE(second_condition, nullptr);
   const int* second_condition_right = GetIntLiteralValue(second_condition->right);
   ASSERT_NE(second_condition_right, nullptr);
@@ -292,7 +292,7 @@ TEST(ParserTreeTests, ParsesElseIfChainTree) {
   ASSERT_NE(third_if->else_tail->else_block, nullptr);
 
   const auto* third_condition =
-      GetExpressionNode<Parsing::LessExpression>(third_if->condition);
+      GetExpressionNode<Front::LessExpression>(third_if->condition);
   ASSERT_NE(third_condition, nullptr);
   const int* third_condition_right = GetIntLiteralValue(third_condition->right);
   ASSERT_NE(third_condition_right, nullptr);
@@ -307,20 +307,20 @@ TEST(ParserTreeTests, ParsesElseIfChainTree) {
 TEST(ParserTreeTests, ParsesIfTreeWithoutElseTail) {
   const std::string source = "func main() { if x > 0 { print(x); } }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 1);
   ASSERT_NE(program.top_statements[0], nullptr);
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1u);
   ASSERT_NE(main_function->body->statements[0], nullptr);
 
   const auto* if_statement =
-      std::get_if<Parsing::IfStatement>(&main_function->body->statements[0]->value);
+      std::get_if<Front::IfStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(if_statement, nullptr);
   ASSERT_NE(if_statement->condition, nullptr);
   ASSERT_NE(if_statement->true_block, nullptr);
@@ -329,7 +329,7 @@ TEST(ParserTreeTests, ParsesIfTreeWithoutElseTail) {
   ASSERT_EQ(if_statement->else_tail->else_block, nullptr);
   ASSERT_EQ(if_statement->true_block->statements.size(), 1);
 
-  const std::string printed = Parsing::PrintInfix(program);
+  const std::string printed = Front::PrintInfix(program);
   EXPECT_EQ(printed, source);
 }
 
@@ -338,73 +338,73 @@ TEST(ParserTreeTests, ParsesFunctionDeclarationAndNamedCall) {
       "func foo(a int, b bool) int { return a; }\n"
       "func main() { foo(x: 1, y: true); }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 2);
   ASSERT_NE(program.top_statements[0], nullptr);
   ASSERT_NE(program.top_statements[1], nullptr);
 
   const auto* function_decl =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[0]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(function_decl, nullptr);
   EXPECT_EQ(function_decl->function_name.name, "foo");
   ASSERT_EQ(function_decl->parameters.size(), 2);
   EXPECT_EQ(function_decl->parameters[0].name.name, "a");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->parameters[0].type->type));
+  EXPECT_TRUE(std::holds_alternative<Front::IntType>(function_decl->parameters[0].type->type));
   EXPECT_EQ(function_decl->parameters[1].name.name, "b");
-  EXPECT_TRUE(std::holds_alternative<Parsing::BoolType>(function_decl->parameters[1].type->type));
+  EXPECT_TRUE(std::holds_alternative<Front::BoolType>(function_decl->parameters[1].type->type));
   ASSERT_NE(function_decl->GetReturnType(), nullptr);
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(function_decl->GetReturnType()->type));
+  EXPECT_TRUE(std::holds_alternative<Front::IntType>(function_decl->GetReturnType()->type));
   ASSERT_NE(function_decl->body, nullptr);
   ASSERT_EQ(function_decl->body->statements.size(), 1);
 
   const auto* return_statement =
-      std::get_if<Parsing::ReturnStatement>(&function_decl->body->statements[0]->value);
+      std::get_if<Front::ReturnStatement>(&function_decl->body->statements[0]->value);
   ASSERT_NE(return_statement, nullptr);
   ASSERT_NE(return_statement->expr, nullptr);
 
   const auto* returned_identifier =
-      GetExpressionNode<Parsing::IdentifierExpression>(return_statement->expr);
+      GetExpressionNode<Front::IdentifierExpression>(return_statement->expr);
   ASSERT_NE(returned_identifier, nullptr);
   EXPECT_EQ(returned_identifier->name, "a");
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[1]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[1]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1u);
   ASSERT_NE(main_function->body->statements[0], nullptr);
 
   const auto* expression_statement =
-      std::get_if<Parsing::Expression>(&main_function->body->statements[0]->value);
+      std::get_if<Front::Expression>(&main_function->body->statements[0]->value);
   ASSERT_NE(expression_statement, nullptr);
 
-  const auto* function_call = std::get_if<Parsing::FunctionCall>(&expression_statement->value);
+  const auto* function_call = std::get_if<Front::FunctionCall>(&expression_statement->value);
   ASSERT_NE(function_call, nullptr);
   EXPECT_EQ(function_call->function_name.name, "foo");
   ASSERT_EQ(function_call->arguments.size(), 2);
 
   const auto* first_named =
-      std::get_if<Parsing::NamedCallArgument>(function_call->arguments[0].get());
+      std::get_if<Front::NamedCallArgument>(function_call->arguments[0].get());
   ASSERT_NE(first_named, nullptr);
   EXPECT_EQ(first_named->name.name, "x");
   ASSERT_NE(first_named->value, nullptr);
 
   const auto* first_named_number =
-      GetExpressionNode<Parsing::LiteralExpression>(first_named->value);
+      GetExpressionNode<Front::LiteralExpression>(first_named->value);
   ASSERT_NE(first_named_number, nullptr);
   const auto* first_named_number_value = std::get_if<int>(&first_named_number->value);
   ASSERT_NE(first_named_number_value, nullptr);
   EXPECT_EQ(*first_named_number_value, 1);
 
   const auto* second_named =
-      std::get_if<Parsing::NamedCallArgument>(function_call->arguments[1].get());
+      std::get_if<Front::NamedCallArgument>(function_call->arguments[1].get());
   ASSERT_NE(second_named, nullptr);
   EXPECT_EQ(second_named->name.name, "y");
   ASSERT_NE(second_named->value, nullptr);
 
   const auto* second_named_bool =
-      GetExpressionNode<Parsing::LiteralExpression>(second_named->value);
+      GetExpressionNode<Front::LiteralExpression>(second_named->value);
   ASSERT_NE(second_named_bool, nullptr);
   const auto* second_named_bool_value = std::get_if<bool>(&second_named_bool->value);
   ASSERT_NE(second_named_bool_value, nullptr);
@@ -417,24 +417,24 @@ TEST(ParserTreeTests, ParsesMethodCallExpression) {
       "var box Box;\n"
       "func main() { box.get(7); }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 3u);
   ASSERT_NE(program.top_statements[2], nullptr);
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[2]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[2]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1u);
   ASSERT_NE(main_function->body->statements[0], nullptr);
 
   const auto* expression_statement =
-      std::get_if<Parsing::Expression>(&main_function->body->statements[0]->value);
+      std::get_if<Front::Expression>(&main_function->body->statements[0]->value);
   ASSERT_NE(expression_statement, nullptr);
 
   const auto* method_call =
-      std::get_if<Parsing::MethodCall>(&expression_statement->value);
+      std::get_if<Front::MethodCall>(&expression_statement->value);
   ASSERT_NE(method_call, nullptr);
   EXPECT_EQ(method_call->object_name.name, "box");
   EXPECT_EQ(method_call->function_call.function_name.name, "get");
@@ -442,26 +442,26 @@ TEST(ParserTreeTests, ParsesMethodCallExpression) {
   ASSERT_NE(method_call->function_call.arguments[0], nullptr);
 
   const auto* positional_argument =
-      std::get_if<Parsing::PositionalCallArgument>(method_call->function_call.arguments[0].get());
+      std::get_if<Front::PositionalCallArgument>(method_call->function_call.arguments[0].get());
   ASSERT_NE(positional_argument, nullptr);
   ASSERT_NE(positional_argument->value, nullptr);
   const int* literal_value = GetIntLiteralValue(positional_argument->value);
   ASSERT_NE(literal_value, nullptr);
   EXPECT_EQ(*literal_value, 7);
 
-  EXPECT_EQ(Parsing::PrintInfix(program), source);
+  EXPECT_EQ(Front::PrintInfix(program), source);
 }
 
 TEST(ParserTreeTests, ParsesFieldAccessExpression) {
   const std::string source =
       "class Box { var value int; func get(other Box) int { return other.value; } }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 1u);
   ASSERT_NE(program.top_statements[0], nullptr);
   const auto* box_class =
-      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+      std::get_if<Front::ClassDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(box_class, nullptr);
   ASSERT_EQ(box_class->methods.size(), 1u);
   ASSERT_NE(box_class->methods[0].body, nullptr);
@@ -469,17 +469,17 @@ TEST(ParserTreeTests, ParsesFieldAccessExpression) {
   ASSERT_NE(box_class->methods[0].body->statements[0], nullptr);
 
   const auto* return_statement =
-      std::get_if<Parsing::ReturnStatement>(&box_class->methods[0].body->statements[0]->value);
+      std::get_if<Front::ReturnStatement>(&box_class->methods[0].body->statements[0]->value);
   ASSERT_NE(return_statement, nullptr);
   ASSERT_NE(return_statement->expr, nullptr);
 
   const auto* field_access =
-      std::get_if<Parsing::FieldAccess>(&return_statement->expr->value);
+      std::get_if<Front::FieldAccess>(&return_statement->expr->value);
   ASSERT_NE(field_access, nullptr);
   EXPECT_EQ(field_access->object_name.name, "other");
   EXPECT_EQ(field_access->field_name.name, "value");
 
-  EXPECT_EQ(Parsing::PrintInfix(program), source);
+  EXPECT_EQ(Front::PrintInfix(program), source);
 }
 
 TEST(ParserTreeTests, ParsesDeleteStatement) {
@@ -488,26 +488,26 @@ TEST(ParserTreeTests, ParsesDeleteStatement) {
       "var box Box;\n"
       "func main() { delete box; }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 3u);
   ASSERT_NE(program.top_statements[2], nullptr);
 
   const auto* main_function =
-      std::get_if<Parsing::FunctionDeclarationStatement>(&program.top_statements[2]->value);
+      std::get_if<Front::FunctionDeclarationStatement>(&program.top_statements[2]->value);
   ASSERT_NE(main_function, nullptr);
   ASSERT_NE(main_function->body, nullptr);
   ASSERT_EQ(main_function->body->statements.size(), 1u);
   ASSERT_NE(main_function->body->statements[0], nullptr);
 
   const auto* delete_statement =
-      std::get_if<Parsing::DeleteStatement>(&main_function->body->statements[0]->value);
+      std::get_if<Front::DeleteStatement>(&main_function->body->statements[0]->value);
   ASSERT_NE(delete_statement, nullptr);
   EXPECT_EQ(delete_statement->variable.name, "box");
 
-  EXPECT_EQ(Parsing::PrintInfix(program), source);
+  EXPECT_EQ(Front::PrintInfix(program), source);
   EXPECT_NE(
-      Parsing::PrintAstTree(program).find("DeleteStatement: box"),
+      Front::PrintAstTree(program).find("DeleteStatement: box"),
       std::string::npos);
 }
 
@@ -518,8 +518,8 @@ TEST(ParserTreeTests, PrintsProgramInInfixOrder) {
       "func choose(a int) int { return a; }\n"
       "func main() { if flag { print(x); } else { print(false); } choose(a: x); }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
-  const std::string printed = Parsing::PrintInfix(program);
+  const Front::Program program = Front::ParseSource(source);
+  const std::string printed = Front::PrintInfix(program);
 
   EXPECT_EQ(printed, source);
 }
@@ -530,8 +530,8 @@ TEST(ParserTreeTests, PrintsProgramAsAstTree) {
       "func foo(a int) int { return a; }\n"
       "func main() { foo(a: 1); }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
-  const std::string tree = Parsing::PrintAstTree(program);
+  const Front::Program program = Front::ParseSource(source);
+  const std::string tree = Front::PrintAstTree(program);
 
   EXPECT_NE(tree.find("DeclarationStatement: flag bool"), std::string::npos);
   EXPECT_NE(tree.find("FunctionDeclarationStatement: foo"), std::string::npos);
@@ -549,7 +549,7 @@ TEST(ParserTreeTests, ReportsMultipleLexerAndParserErrorsTogether) {
       "}\n";
 
   try {
-    static_cast<void>(Parsing::ParseSource(source, "broken.cgor"));
+    static_cast<void>(Front::ParseSource(source, "broken.cgor"));
     FAIL() << "Expected ParseSource to throw aggregated frontend errors";
   } catch (const std::runtime_error& error) {
     const std::string message = error.what();
@@ -564,31 +564,31 @@ TEST(ParserTreeTests, ParsesClassInheritanceAndFields) {
       "class Base { var id int; func getId() int { return id; } }\n"
       "class Derived:Base { var count int; var parent Base; func getParent() Base { return parent; } }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
+  const Front::Program program = Front::ParseSource(source);
 
   ASSERT_EQ(program.top_statements.size(), 2u);
   ASSERT_NE(program.top_statements[0], nullptr);
   ASSERT_NE(program.top_statements[1], nullptr);
 
   const auto* base_class =
-      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[0]->value);
+      std::get_if<Front::ClassDeclarationStatement>(&program.top_statements[0]->value);
   ASSERT_NE(base_class, nullptr);
   EXPECT_EQ(base_class->class_name.name, "Base");
   ASSERT_NE(base_class->class_type, nullptr);
-  const auto* base_class_type = Parsing::AsClassType(base_class->class_type);
+  const auto* base_class_type = Front::AsClassType(base_class->class_type);
   ASSERT_NE(base_class_type, nullptr);
   EXPECT_EQ(base_class_type->base_class, nullptr);
   ASSERT_EQ(base_class->fields.size(), 1u);
   ASSERT_EQ(base_class->methods.size(), 1u);
   EXPECT_EQ(base_class->fields[0].variable_name.name, "id");
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(base_class->fields[0].type->type));
+  EXPECT_TRUE(std::holds_alternative<Front::IntType>(base_class->fields[0].type->type));
 
   const auto* derived_class =
-      std::get_if<Parsing::ClassDeclarationStatement>(&program.top_statements[1]->value);
+      std::get_if<Front::ClassDeclarationStatement>(&program.top_statements[1]->value);
   ASSERT_NE(derived_class, nullptr);
   EXPECT_EQ(derived_class->class_name.name, "Derived");
   ASSERT_NE(derived_class->class_type, nullptr);
-  const auto* derived_class_type = Parsing::AsClassType(derived_class->class_type);
+  const auto* derived_class_type = Front::AsClassType(derived_class->class_type);
   ASSERT_NE(derived_class_type, nullptr);
   ASSERT_NE(derived_class_type->base_class, nullptr);
   ASSERT_NE(derived_class_type->base_class->parent, nullptr);
@@ -596,10 +596,10 @@ TEST(ParserTreeTests, ParsesClassInheritanceAndFields) {
   ASSERT_EQ(derived_class->fields.size(), 2u);
   ASSERT_EQ(derived_class->methods.size(), 1u);
 
-  EXPECT_TRUE(std::holds_alternative<Parsing::IntType>(derived_class->fields[0].type->type));
+  EXPECT_TRUE(std::holds_alternative<Front::IntType>(derived_class->fields[0].type->type));
 
   const auto* class_type =
-      std::get_if<Parsing::ClassType>(&derived_class->fields[1].type->type);
+      std::get_if<Front::ClassType>(&derived_class->fields[1].type->type);
   ASSERT_NE(class_type, nullptr);
   ASSERT_NE(class_type->parent, nullptr);
   EXPECT_EQ(class_type->parent->class_name.name, "Base");
@@ -610,7 +610,7 @@ TEST(ParserTreeTests, RejectsClassBodyWithMethodBeforeField) {
       "class Broken { func f() { } var x int; }\n";
 
   EXPECT_THROW(
-      static_cast<void>(Parsing::ParseSource(source)),
+      static_cast<void>(Front::ParseSource(source)),
       std::runtime_error);
 }
 

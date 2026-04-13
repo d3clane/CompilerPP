@@ -11,7 +11,7 @@
 #include "Utils/ClassMemberLookup.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 namespace {
 
@@ -566,4 +566,4 @@ UseResolver BuildUseResolver(const Program& program, SymbolTable& symbol_table) 
   return resolver;
 }
 
-}  // namespace Parsing
+}  // namespace Front

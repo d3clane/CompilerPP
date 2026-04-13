@@ -9,7 +9,7 @@
 #include "Debug/DebugCtx.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 const ASTNode* SymbolData::GetDeclarationNode() const {
   if (declaration_ref.node == nullptr) {
@@ -519,4 +519,4 @@ SymbolTable BuildSymbolTable(const Program& program) {
   return symbol_table;
 }
 
-}  // namespace Parsing
+}  // namespace Front

@@ -35,7 +35,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
 
-namespace Parsing {
+namespace Front {
 
 LLVMIRModule::LLVMIRModule(
     std::unique_ptr<llvm::LLVMContext> context,
@@ -2347,4 +2347,4 @@ std::string LowerToLLVMIR(
   return LowerToLLVMIRModule(program, use_resolver).ToString();
 }
 
-}  // namespace Parsing
+}  // namespace Front

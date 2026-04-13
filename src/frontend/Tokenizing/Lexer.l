@@ -19,8 +19,8 @@
 namespace {
 
 std::vector<Tokenizing::TokenVariant>* g_tokens = nullptr;
-std::vector<Parsing::DebugInfo>* g_token_debug_infos = nullptr;
-Parsing::FrontendErrors* g_errors = nullptr;
+std::vector<Front::DebugInfo>* g_token_debug_infos = nullptr;
+Front::FrontendErrors* g_errors = nullptr;
 
 std::string g_filename;
 
@@ -55,10 +55,10 @@ void AdvancePosition(const char* text, int length) {
   }
 }
 
-Parsing::DebugInfo BuildDebugInfo(
+Front::DebugInfo BuildDebugInfo(
     const Position& start,
     const Position& end) {
-  return Parsing::CreateDebugInfo(
+  return Front::CreateDebugInfo(
       g_filename,
       {start.line, end.line},
       {start.column, end.column},
@@ -206,8 +206,8 @@ namespace Tokenizing {
 std::vector<TokenVariant> Tokenize(
     const std::string& input,
     const std::string& filename,
-    Parsing::FrontendErrors* errors,
-    std::vector<Parsing::DebugInfo>* token_debug_infos) {
+    Front::FrontendErrors* errors,
+    std::vector<Front::DebugInfo>* token_debug_infos) {
   std::vector<TokenVariant> tokens;
   g_tokens = &tokens;
   g_token_debug_infos = token_debug_infos;

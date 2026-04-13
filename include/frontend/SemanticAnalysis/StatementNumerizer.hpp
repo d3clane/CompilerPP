@@ -6,7 +6,7 @@
 
 #include "Parsing/Ast.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class StatementNumerizer {
  public:
@@ -33,4 +33,4 @@ class StatementNumerizer {
 
 StatementNumerizer BuildStatementNumerizer(const Program& program);
 
-}  // namespace Parsing
+}  // namespace Front

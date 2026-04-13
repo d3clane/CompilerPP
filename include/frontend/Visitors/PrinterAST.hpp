@@ -4,8 +4,8 @@
 
 #include "Parsing/Ast.hpp"
 
-namespace Parsing {
+namespace Front {
 
 std::string PrintAstTree(const Program& program);
 
-}  // namespace Parsing
+}  // namespace Front

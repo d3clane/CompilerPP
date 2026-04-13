@@ -5,7 +5,7 @@
 #include "Debug/Debug.hpp"
 #include "Debug/Errors.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class DebugCtx {
  public:
@@ -27,4 +27,4 @@ class DebugCtx {
   FrontendErrors frontend_errors_;
 };
 
-}  // namespace Parsing
+}  // namespace Front
