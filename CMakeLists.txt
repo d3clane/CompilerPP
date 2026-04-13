@@ -8,52 +8,32 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(BISON 3.8 REQUIRED)
 find_package(FLEX REQUIRED)
-if(NOT DEFINED LLVM_CONFIG_EXE)
-  foreach(LLVM_MAJOR_CANDIDATE 21 20 19)
-    set(LLVM_CONFIG_CANDIDATE "/opt/homebrew/opt/llvm@${LLVM_MAJOR_CANDIDATE}/bin/llvm-config")
-    if(EXISTS "${LLVM_CONFIG_CANDIDATE}" AND EXISTS "/opt/homebrew/opt/lld@${LLVM_MAJOR_CANDIDATE}/lib/cmake/lld/LLDConfig.cmake")
-      set(LLVM_CONFIG_EXE "${LLVM_CONFIG_CANDIDATE}" CACHE FILEPATH "Path to llvm-config")
-      break()
-    endif()
-  endforeach()
+
+find_package(LLVM CONFIG REQUIRED)
+set(LLVM_VERSION "${LLVM_PACKAGE_VERSION}")
+string(REGEX MATCH "^[0-9]+" LLVM_VERSION_MAJOR "${LLVM_VERSION}")
+if(LLVM_VERSION_MAJOR LESS 21)
+  message(FATAL_ERROR "LLVM >= 21 is required, but found LLVM ${LLVM_VERSION}")
 endif()
 
-find_program(LLVM_CONFIG_EXE NAMES llvm-config REQUIRED)
-execute_process(
-  COMMAND "${LLVM_CONFIG_EXE}" --includedir
-  OUTPUT_VARIABLE LLVM_INCLUDE_DIR
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-  COMMAND "${LLVM_CONFIG_EXE}" --prefix
-  OUTPUT_VARIABLE LLVM_PREFIX
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-  COMMAND "${LLVM_CONFIG_EXE}" --version
-  OUTPUT_VARIABLE LLVM_VERSION
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-string(REGEX MATCH "^[0-9]+" LLVM_VERSION_MAJOR "${LLVM_VERSION}")
-set(LLVM_DIR "${LLVM_PREFIX}/lib/cmake/llvm" CACHE PATH "LLVM CMake package directory" FORCE)
-execute_process(
-  COMMAND "${LLVM_CONFIG_EXE}" --libfiles core nativecodegen target targetparser mc mcparser asmparser asmprinter passes support
-  OUTPUT_VARIABLE LLVM_LIBS
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-execute_process(
-  COMMAND "${LLVM_CONFIG_EXE}" --system-libs
-  OUTPUT_VARIABLE LLVM_SYSTEM_LIBS
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-separate_arguments(LLVM_LIBS UNIX_COMMAND "${LLVM_LIBS}")
-separate_arguments(LLVM_SYSTEM_LIBS UNIX_COMMAND "${LLVM_SYSTEM_LIBS}")
+if(APPLE)
+  find_package(
+    LLD ${LLVM_VERSION} EXACT CONFIG REQUIRED
+  )
+endif()
 
-find_package(
-  LLD ${LLVM_VERSION} EXACT CONFIG REQUIRED
-  HINTS
-    "${LLVM_PREFIX}"
-    "/opt/homebrew/opt/lld@${LLVM_VERSION_MAJOR}"
+llvm_map_components_to_libnames(
+  LLVM_LIBS
+  core
+  nativecodegen
+  target
+  targetparser
+  mc
+  mcparser
+  asmparser
+  asmprinter
+  passes
+  support
 )
 
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -105,18 +85,31 @@ target_include_directories(
     "${CMAKE_CURRENT_SOURCE_DIR}/include/frontend"
     "${GENERATED_DIR}"
   PRIVATE
-    "${LLVM_INCLUDE_DIR}"
-    "${LLD_INCLUDE_DIRS}"
+    "${LLVM_INCLUDE_DIRS}"
 )
+
+if(APPLE)
+  target_include_directories(
+    compiler_frontend
+    PRIVATE
+      "${LLD_INCLUDE_DIRS}"
+  )
+endif()
 
 target_link_libraries(
   compiler_frontend
   PRIVATE
     ${LLVM_LIBS}
-    ${LLVM_SYSTEM_LIBS}
-    lldMachO
-    lldCommon
 )
+
+if(APPLE)
+  target_link_libraries(
+    compiler_frontend
+    PRIVATE
+      lldMachO
+      lldCommon
+  )
+endif()
 
 target_compile_features(compiler_frontend PUBLIC cxx_std_20)
 

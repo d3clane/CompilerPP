@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iterator>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -10,6 +11,7 @@
 #include "Debug/DebugCtx.hpp"
 #include "Lowering/ExecutableLowering.hpp"
 #include "Lowering/LLVMIRLowering.hpp"
+#include "Lowering/ObjectFileLowering.hpp"
 #include "Parsing/Parser.hpp"
 #include "SemanticAnalysis/AccessAllowanceChecker.hpp"
 #include "SemanticAnalysis/Resolver.hpp"
@@ -19,18 +21,50 @@
 #include "Tokenizing/Lexer.hpp"
 
 int main(int argc, char* argv[]) {
-  if (argc < 2 || argc > 3) {
-    std::cerr << "Usage: " << argv[0] << " <input-file> [output-executable]\n";
+  enum class EmitMode {
+    kExecutable,
+    kLLVMIR,
+    kObjectFile,
+  };
+
+  EmitMode emit_mode = EmitMode::kExecutable;
+  int arg_index = 1;
+  if (argc >= 2) {
+    const std::string first_arg = argv[1];
+    if (first_arg == "-emit-llvm") {
+      emit_mode = EmitMode::kLLVMIR;
+      arg_index = 2;
+    } else if (first_arg == "-emit-obj" || first_arg == "-emit-object") {
+      emit_mode = EmitMode::kObjectFile;
+      arg_index = 2;
+    }
+  }
+
+  const int remaining_args = argc - arg_index;
+  if (remaining_args < 1 || remaining_args > 2) {
+    std::cerr
+        << "Usage: " << argv[0]
+        << " [-emit-llvm|-emit-obj|-emit-object] <input-file> [output]\n";
     return 1;
   }
 
-  const std::string input_path = argv[1];
+  const std::string input_path = argv[arg_index];
   std::filesystem::path output_path;
-  if (argc == 3) {
-    output_path = argv[2];
+  if (remaining_args == 2) {
+    output_path = argv[arg_index + 1];
   } else {
     output_path = input_path;
-    output_path.replace_extension();
+    switch (emit_mode) {
+      case EmitMode::kExecutable:
+        output_path.replace_extension();
+        break;
+      case EmitMode::kLLVMIR:
+        output_path.replace_extension(".ll");
+        break;
+      case EmitMode::kObjectFile:
+        output_path.replace_extension(".o");
+        break;
+    }
   }
 
   std::ifstream input_stream(input_path);
@@ -88,7 +122,23 @@ int main(int argc, char* argv[]) {
     Parsing::LLVMIRModule llvm_ir = Parsing::LowerToLLVMIRModule(
         program,
         use_resolver);
-    Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
+    switch (emit_mode) {
+      case EmitMode::kExecutable:
+        Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
+        break;
+      case EmitMode::kLLVMIR: {
+        std::ofstream output_stream(output_path);
+        if (!output_stream) {
+          throw std::runtime_error(
+              "Failed to open output file: " + output_path.string());
+        }
+        output_stream << llvm_ir.ToString();
+        break;
+      }
+      case EmitMode::kObjectFile:
+        Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+        break;
+    }
   } catch (const std::exception& error) {
     if (debug_ctx.has_value() && debug_ctx->GetErrors().HasErrors()) {
       try {

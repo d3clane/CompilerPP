@@ -43,14 +43,15 @@ void InitializeNativeObjectTarget() {
 std::unique_ptr<llvm::TargetMachine> CreateHostTargetMachine() {
   InitializeNativeObjectTarget();
 
-  const std::string target_triple = llvm::sys::getDefaultTargetTriple();
+  const llvm::Triple target_triple(llvm::sys::getDefaultTargetTriple());
+  const std::string target_triple_text = target_triple.str();
   std::string lookup_error;
   const llvm::Target* target =
       llvm::TargetRegistry::lookupTarget(target_triple, lookup_error);
   if (target == nullptr) {
     throw std::runtime_error(
         "Failed to find LLVM target for triple " +
-        target_triple +
+        target_triple_text +
         ": " +
         lookup_error);
   }
@@ -70,7 +71,7 @@ std::unique_ptr<llvm::TargetMachine> CreateHostTargetMachine() {
       llvm::Reloc::PIC_);
   if (target_machine == nullptr) {
     throw std::runtime_error(
-        "Failed to create LLVM target machine for triple " + target_triple);
+        "Failed to create LLVM target machine for triple " + target_triple_text);
   }
 
   return std::unique_ptr<llvm::TargetMachine>(target_machine);
@@ -98,7 +99,7 @@ void LowerToObjectFile(
     const std::string& output_path) {
   std::unique_ptr<llvm::TargetMachine> target_machine =
       CreateHostTargetMachine();
-  module.setTargetTriple(target_machine->getTargetTriple().str());
+  module.setTargetTriple(target_machine->getTargetTriple());
   module.setDataLayout(target_machine->createDataLayout());
 
   std::error_code error_code;
