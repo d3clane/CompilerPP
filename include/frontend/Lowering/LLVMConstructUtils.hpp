@@ -14,7 +14,7 @@ class Module;
 class Type;
 }  // namespace llvm
 
-namespace Parsing {
+namespace Front {
 
 class LLVMConstructUtils {
  public:
@@ -38,4 +38,4 @@ class LLVMConstructUtils {
   llvm::Module& module_;
 };
 
-}  // namespace Parsing
+}  // namespace Front

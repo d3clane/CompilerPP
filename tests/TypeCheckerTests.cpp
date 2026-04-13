@@ -12,34 +12,34 @@
 namespace {
 
 static_assert(
-    Parsing::IsSupportedExprOp<Parsing::AddExpression, Parsing::IntType>());
+    Front::IsSupportedExprOp<Front::AddExpression, Front::IntType>());
 static_assert(
-    !Parsing::IsSupportedExprOp<Parsing::AddExpression, Parsing::BoolType>());
+    !Front::IsSupportedExprOp<Front::AddExpression, Front::BoolType>());
 static_assert(
-    Parsing::IsSupportedExprOp<Parsing::UnaryNotExpression, Parsing::BoolType>());
+    Front::IsSupportedExprOp<Front::UnaryNotExpression, Front::BoolType>());
 static_assert(
-    !Parsing::IsSupportedExprOp<Parsing::UnaryNotExpression, Parsing::IntType>());
+    !Front::IsSupportedExprOp<Front::UnaryNotExpression, Front::IntType>());
 
 void ExpectTypeCheckPass(const std::string& source) {
-  const Parsing::Program program = Parsing::ParseSource(source);
-  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
-  const Parsing::UseResolver resolver =
-      Parsing::BuildUseResolver(program, symbol_table);
+  const Front::Program program = Front::ParseSource(source);
+  Front::SymbolTable symbol_table = Front::BuildSymbolTable(program);
+  const Front::UseResolver resolver =
+      Front::BuildUseResolver(program, symbol_table);
   EXPECT_NO_THROW(
-      Parsing::CheckAccessAllowance(program, resolver));
+      Front::CheckAccessAllowance(program, resolver));
   EXPECT_NO_THROW(
-      Parsing::CheckTypes(program, resolver));
+      Front::CheckTypes(program, resolver));
 }
 
 void ExpectTypeCheckFail(const std::string& source) {
-  const Parsing::Program program = Parsing::ParseSource(source);
-  Parsing::SymbolTable symbol_table = Parsing::BuildSymbolTable(program);
+  const Front::Program program = Front::ParseSource(source);
+  Front::SymbolTable symbol_table = Front::BuildSymbolTable(program);
   EXPECT_THROW(
       {
-        const Parsing::UseResolver resolver =
-            Parsing::BuildUseResolver(program, symbol_table);
-        Parsing::CheckAccessAllowance(program, resolver);
-        Parsing::CheckTypes(program, resolver);
+        const Front::UseResolver resolver =
+            Front::BuildUseResolver(program, symbol_table);
+        Front::CheckAccessAllowance(program, resolver);
+        Front::CheckTypes(program, resolver);
       },
       std::runtime_error);
 }
@@ -279,8 +279,8 @@ TEST(TypeCheckerTests, RejectsVariableRedefinitionInSameScope) {
   const std::string source =
       "func main() { var x int = 1; var x int = 2; }\n";
 
-  const Parsing::Program program = Parsing::ParseSource(source);
-  EXPECT_ANY_THROW(Parsing::BuildSymbolTable(program));
+  const Front::Program program = Front::ParseSource(source);
+  EXPECT_ANY_THROW(Front::BuildSymbolTable(program));
 }
 
 TEST(TypeCheckerTests, AcceptsUsingGlobalClassTypeBeforeDefinition) {

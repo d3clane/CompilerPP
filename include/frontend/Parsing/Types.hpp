@@ -10,7 +10,7 @@
 #include <variant>
 #include <vector>
 
-namespace Parsing {
+namespace Front {
 
 struct IdentifierExpression;
 struct FunctionDeclarationStatement;
@@ -118,4 +118,4 @@ bool IsBoolType(const Type* type);
 
 #undef ADD_OPERATOR_EQUAL
 
-}  // namespace Parsing
+}  // namespace Front

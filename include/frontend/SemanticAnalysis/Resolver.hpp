@@ -7,7 +7,7 @@
 #include "Parsing/Ast.hpp"
 #include "SemanticAnalysis/SymbolTable.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class DebugCtx;
 
@@ -54,4 +54,4 @@ UseResolver BuildUseResolver(
     DebugCtx& debug_ctx);
 UseResolver BuildUseResolver(const Program& program, SymbolTable& symbol_table);
 
-}  // namespace Parsing
+}  // namespace Front

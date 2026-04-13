@@ -9,7 +9,7 @@
 #include "Parsing/Ast.hpp"
 #include "SemanticAnalysis/StatementNumerizer.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class DebugCtx;
 
@@ -95,4 +95,4 @@ SymbolTable BuildSymbolTable(
 SymbolTable BuildSymbolTable(const Program& program, DebugCtx& debug_ctx);
 SymbolTable BuildSymbolTable(const Program& program);
 
-}  // namespace Parsing
+}  // namespace Front

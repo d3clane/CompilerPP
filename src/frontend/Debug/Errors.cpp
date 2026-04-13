@@ -5,7 +5,7 @@
 #include <stdexcept>
 #include <utility>
 
-namespace Parsing {
+namespace Front {
 
 namespace {
 
@@ -135,4 +135,4 @@ bool FrontendErrors::HasErrors() const {
   return !errors_.empty();
 }
 
-}  // namespace Parsing
+}  // namespace Front

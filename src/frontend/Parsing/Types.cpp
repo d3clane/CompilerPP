@@ -2,7 +2,7 @@
 
 #include "Parsing/Ast.hpp"
 
-namespace Parsing {
+namespace Front {
 
 namespace {
 
@@ -143,4 +143,4 @@ bool IsBoolType(const Type* type) {
   return type != nullptr && std::holds_alternative<BoolType>(type->type);
 }
 
-}  // namespace Parsing
+}  // namespace Front

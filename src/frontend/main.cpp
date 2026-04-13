@@ -77,13 +77,13 @@ int main(int argc, char* argv[]) {
       std::istreambuf_iterator<char>(input_stream),
       std::istreambuf_iterator<char>()};
 
-  std::optional<Parsing::DebugCtx> debug_ctx;
+  std::optional<Front::DebugCtx> debug_ctx;
   try {
     debug_ctx.emplace(input_path);
     debug_ctx->SetInputCode(source);
     debug_ctx->GetErrors().SetLimit(20);
 
-    std::vector<Parsing::DebugInfo> token_debug_infos;
+    std::vector<Front::DebugInfo> token_debug_infos;
     const std::vector<Tokenizing::TokenVariant> tokens =
         Tokenizing::Tokenize(
             source,
@@ -91,26 +91,26 @@ int main(int argc, char* argv[]) {
             &debug_ctx->GetErrors(),
             &token_debug_infos);
 
-    const Parsing::Program program = Parsing::ParseTokens(
+    const Front::Program program = Front::ParseTokens(
         tokens,
         *debug_ctx,
         &token_debug_infos,
         source.size());
 
-    Parsing::StatementNumerizer numerizer =
-        Parsing::BuildStatementNumerizer(program);
-    Parsing::SymbolTable symbol_table =
-        Parsing::BuildSymbolTable(
+    Front::StatementNumerizer numerizer =
+        Front::BuildStatementNumerizer(program);
+    Front::SymbolTable symbol_table =
+        Front::BuildSymbolTable(
             program,
             std::move(numerizer),
             *debug_ctx);
-    const Parsing::UseResolver use_resolver =
-        Parsing::BuildUseResolver(program, symbol_table, *debug_ctx);
-    Parsing::CheckAccessAllowance(
+    const Front::UseResolver use_resolver =
+        Front::BuildUseResolver(program, symbol_table, *debug_ctx);
+    Front::CheckAccessAllowance(
         program,
         use_resolver,
         *debug_ctx);
-    Parsing::CheckTypes(
+    Front::CheckTypes(
         program,
         use_resolver,
         *debug_ctx);
@@ -119,12 +119,12 @@ int main(int argc, char* argv[]) {
       debug_ctx->GetErrors().ThrowErrors();
     }
 
-    Parsing::LLVMIRModule llvm_ir = Parsing::LowerToLLVMIRModule(
+    Front::LLVMIRModule llvm_ir = Front::LowerToLLVMIRModule(
         program,
         use_resolver);
     switch (emit_mode) {
       case EmitMode::kExecutable:
-        Parsing::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
+        Front::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
         break;
       case EmitMode::kLLVMIR: {
         std::ofstream output_stream(output_path);
@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
         break;
       }
       case EmitMode::kObjectFile:
-        Parsing::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+        Front::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
         break;
     }
   } catch (const std::exception& error) {

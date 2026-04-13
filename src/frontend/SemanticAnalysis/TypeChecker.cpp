@@ -13,7 +13,7 @@
 #include "Utils/ClassMemberLookup.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 namespace {
 
@@ -114,7 +114,7 @@ class TypeCheckerVisitor {
 
     return std::visit(
         []<typename ValueType>(const ValueType&) {
-          return Parsing::IsSupportedExprOp<OpType, ValueType>();
+          return Front::IsSupportedExprOp<OpType, ValueType>();
         },
         type->type);
   }
@@ -955,4 +955,4 @@ void CheckTypes(
   }
 }
 
-}  // namespace Parsing
+}  // namespace Front

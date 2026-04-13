@@ -10,7 +10,7 @@ class LLVMContext;
 class Module;
 }  // namespace llvm
 
-namespace Parsing {
+namespace Front {
 
 class UseResolver;
 
@@ -46,4 +46,4 @@ std::string LowerToLLVMIR(
     const Program& program,
     const UseResolver& use_resolver);
 
-}  // namespace Parsing
+}  // namespace Front

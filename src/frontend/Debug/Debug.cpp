@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace Parsing {
+namespace Front {
 
 void ASTDebugInfo::SetInputCode(std::string input_code) {
   input_code_ = std::move(input_code);
@@ -47,4 +47,4 @@ DebugInfo CreateDebugInfo(
       std::move(stressed_chars)};
 }
 
-}  // namespace Parsing
+}  // namespace Front

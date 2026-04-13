@@ -5,7 +5,7 @@
 
 #include "Parsing/Ast.hpp"
 
-namespace Parsing {
+namespace Front {
 
 enum class ClassMemberSearchMode {
   CurrentClassOnly,
@@ -37,4 +37,4 @@ std::optional<ClassMemberLookupResult> LookupClassMember(
     const std::string& member_name,
     ClassMemberSearchMode search_mode);
 
-}  // namespace Parsing
+}  // namespace Front

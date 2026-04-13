@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace Parsing {
+namespace Front {
 
 DebugCtx::DebugCtx(std::string filename)
     : filename_(std::move(filename)),
@@ -32,4 +32,4 @@ void DebugCtx::SetInputCode(std::string input_code) {
   ast_debug_info_.SetInputCode(std::move(input_code));
 }
 
-}  // namespace Parsing
+}  // namespace Front

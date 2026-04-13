@@ -5,7 +5,7 @@
 
 #include "Parsing/Ast.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class DebugCtx;
 class FunctionRelationsVisitor;
@@ -34,4 +34,4 @@ FunctionRelations BuildFunctionRelations(
     DebugCtx& debug_ctx);
 FunctionRelations BuildFunctionRelations(const Program& program);
 
-}  // namespace Parsing
+}  // namespace Front

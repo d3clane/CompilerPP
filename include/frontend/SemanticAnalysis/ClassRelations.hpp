@@ -6,7 +6,7 @@
 
 #include "Parsing/Ast.hpp"
 
-namespace Parsing {
+namespace Front {
 
 class DebugCtx;
 class ClassRelationsVisitor;
@@ -50,4 +50,4 @@ ClassRelations BuildClassRelations(
 ClassRelations BuildClassRelations(
     const Program& program);
 
-}  // namespace Parsing
+}  // namespace Front

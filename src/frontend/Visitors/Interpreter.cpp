@@ -12,7 +12,7 @@
 #include "SemanticAnalysis/SymbolTable.hpp"
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 namespace {
 
@@ -409,4 +409,4 @@ InterpreterContext Interpret(const Program& program) {
   return Interpret(program, std::cout);
 }
 
-}  // namespace Parsing
+}  // namespace Front

@@ -4,7 +4,7 @@
 
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 namespace {
 
 std::string PrintType(const Type* type);
@@ -408,4 +408,4 @@ std::string PrintAstTree(const Program& program) {
   return result;
 }
 
-}  // namespace Parsing
+}  // namespace Front

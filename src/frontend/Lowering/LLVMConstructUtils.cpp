@@ -12,7 +12,7 @@
 
 #include "Utils/Overload.hpp"
 
-namespace Parsing {
+namespace Front {
 
 LLVMConstructUtils::LLVMConstructUtils(
     llvm::LLVMContext& context,
@@ -128,4 +128,4 @@ llvm::Constant* LLVMConstructUtils::BuildSizeOf(llvm::Type* type) const {
       llvm::Type::getInt64Ty(context_));
 }
 
-}  // namespace Parsing
+}  // namespace Front
