@@ -36,7 +36,7 @@ void LowerSourceToObjectFile(
   Front::CheckTypes(program, resolver);
   Front::LLVMIRModule llvm_ir =
       Front::LowerToLLVMIRModule(program, resolver);
-  Front::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+  Back::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
 }
 
 void LowerSourceToExecutableFile(
@@ -50,7 +50,7 @@ void LowerSourceToExecutableFile(
   Front::CheckTypes(program, resolver);
   Front::LLVMIRModule llvm_ir =
       Front::LowerToLLVMIRModule(program, resolver);
-  Front::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
+  Back::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
 }
 
 TEST(LoweringTests, LowersDerivedLayoutWithEmbeddedBaseAndAllocator) {

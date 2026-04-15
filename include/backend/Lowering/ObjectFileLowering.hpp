@@ -6,10 +6,10 @@ namespace llvm {
 class Module;
 }  // namespace llvm
 
-namespace Front {
+namespace Back {
 
-void LowerToExecutableFile(
+void LowerToObjectFile(
     llvm::Module& module,
     const std::string& output_path);
 
-}  // namespace Front
+}  // namespace Back

@@ -26,7 +26,7 @@
 #include <llvm/Transforms/Scalar/GVN.h>
 #include <llvm/Transforms/Utils.h>
 
-namespace Front {
+namespace Back {
 
 namespace {
 
@@ -131,4 +131,4 @@ void LowerToObjectFile(
   destination.flush();
 }
 
-}  // namespace Front
+}  // namespace Back

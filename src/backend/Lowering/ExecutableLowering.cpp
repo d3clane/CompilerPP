@@ -29,7 +29,7 @@
 LLD_HAS_DRIVER(macho)
 #endif
 
-namespace Front {
+namespace Back {
 namespace {
 
 #if defined(__APPLE__)
@@ -258,4 +258,4 @@ void LowerToExecutableFile(
 #endif
 }
 
-}  // namespace Front
+}  // namespace Back
