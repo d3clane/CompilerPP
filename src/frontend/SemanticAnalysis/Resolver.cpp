@@ -237,7 +237,7 @@ class UseResolverBuilder {
     }
 
     const ClassDeclarationStatement* class_declaration =
-        receiver_class_type->parent;
+        receiver_class_type->class_decl;
     if (class_declaration == nullptr) {
       debug_ctx_.GetErrors().AddError(
           use_node,

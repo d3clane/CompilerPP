@@ -124,7 +124,7 @@ int main(int argc, char* argv[]) {
         use_resolver);
     switch (emit_mode) {
       case EmitMode::kExecutable:
-        Front::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
+        Back::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
         break;
       case EmitMode::kLLVMIR: {
         std::ofstream output_stream(output_path);
@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
         break;
       }
       case EmitMode::kObjectFile:
-        Front::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+        Back::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
         break;
     }
   } catch (const std::exception& error) {

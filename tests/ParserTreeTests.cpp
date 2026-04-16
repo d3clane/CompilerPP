@@ -591,8 +591,8 @@ TEST(ParserTreeTests, ParsesClassInheritanceAndFields) {
   const auto* derived_class_type = Front::AsClassType(derived_class->class_type);
   ASSERT_NE(derived_class_type, nullptr);
   ASSERT_NE(derived_class_type->base_class, nullptr);
-  ASSERT_NE(derived_class_type->base_class->parent, nullptr);
-  EXPECT_EQ(derived_class_type->base_class->parent->class_name.name, "Base");
+  ASSERT_NE(derived_class_type->base_class->class_decl, nullptr);
+  EXPECT_EQ(derived_class_type->base_class->class_decl->class_name.name, "Base");
   ASSERT_EQ(derived_class->fields.size(), 2u);
   ASSERT_EQ(derived_class->methods.size(), 1u);
 
@@ -601,8 +601,8 @@ TEST(ParserTreeTests, ParsesClassInheritanceAndFields) {
   const auto* class_type =
       std::get_if<Front::ClassType>(&derived_class->fields[1].type->type);
   ASSERT_NE(class_type, nullptr);
-  ASSERT_NE(class_type->parent, nullptr);
-  EXPECT_EQ(class_type->parent->class_name.name, "Base");
+  ASSERT_NE(class_type->class_decl, nullptr);
+  EXPECT_EQ(class_type->class_decl->class_name.name, "Base");
 }
 
 TEST(ParserTreeTests, RejectsClassBodyWithMethodBeforeField) {

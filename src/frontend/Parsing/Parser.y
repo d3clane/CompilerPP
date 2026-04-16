@@ -175,7 +175,7 @@ void SyncClassTypeWithDeclaration(ClassDeclarationStatement& class_declaration) 
     return;
   }
 
-  class_type->parent = &class_declaration;
+  class_type->class_decl = &class_declaration;
   class_type->fields.clear();
   class_type->methods.clear();
 

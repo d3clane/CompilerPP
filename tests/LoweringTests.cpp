@@ -1,6 +1,8 @@
 #include <filesystem>
 #include <regex>
+#include <sstream>
 #include <string>
+#include <cstdlib>
 
 #include <gtest/gtest.h>
 
@@ -14,6 +16,37 @@
 #include "TestParseUtils.hpp"
 
 namespace {
+
+bool HasProgramInPath(const std::string& program_name) {
+  const char* path_env = std::getenv("PATH");
+  if (path_env == nullptr) {
+    return false;
+  }
+
+  std::stringstream path_stream(path_env);
+  std::string path_entry;
+  while (std::getline(path_stream, path_entry, ':')) {
+    if (path_entry.empty()) {
+      continue;
+    }
+
+    const std::filesystem::path candidate =
+        std::filesystem::path(path_entry) / program_name;
+    std::error_code ec;
+    const auto status = std::filesystem::status(candidate, ec);
+    constexpr std::filesystem::perms kAnyExecBit =
+        std::filesystem::perms::owner_exec |
+        std::filesystem::perms::group_exec |
+        std::filesystem::perms::others_exec;
+    if (!ec && std::filesystem::is_regular_file(status) &&
+        (status.permissions() & kAnyExecBit) !=
+            std::filesystem::perms::none) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 std::string LowerSource(const std::string& source) {
   const Front::Program program = Front::ParseSource(source);
@@ -36,7 +69,7 @@ void LowerSourceToObjectFile(
   Front::CheckTypes(program, resolver);
   Front::LLVMIRModule llvm_ir =
       Front::LowerToLLVMIRModule(program, resolver);
-  Front::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
+  Back::LowerToObjectFile(llvm_ir.GetModule(), output_path.string());
 }
 
 void LowerSourceToExecutableFile(
@@ -50,7 +83,7 @@ void LowerSourceToExecutableFile(
   Front::CheckTypes(program, resolver);
   Front::LLVMIRModule llvm_ir =
       Front::LowerToLLVMIRModule(program, resolver);
-  Front::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
+  Back::LowerToExecutableFile(llvm_ir.GetModule(), output_path.string());
 }
 
 TEST(LoweringTests, LowersDerivedLayoutWithEmbeddedBaseAndAllocator) {
@@ -216,6 +249,12 @@ TEST(LoweringTests, EmitsNativeObjectFile) {
 }
 
 TEST(LoweringTests, EmitsNativeExecutableFile) {
+#if !defined(__APPLE__)
+  if (!HasProgramInPath("clang")) {
+    GTEST_SKIP() << "clang not found in PATH; executable lowering requires clang on non-Apple platforms";
+  }
+#endif
+
   const std::string source =
       "func main() int { return 0; }\n";
   const std::filesystem::path output_path =

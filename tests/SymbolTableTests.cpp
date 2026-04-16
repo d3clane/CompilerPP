@@ -174,8 +174,8 @@ TEST(SymbolTableTests, StoresClassTypedVariables) {
   EXPECT_EQ(root_symbol->kind, Front::SymbolKind::Variable);
   const auto* class_type = Front::AsClassType(root_symbol->type);
   ASSERT_NE(class_type, nullptr);
-  ASSERT_NE(class_type->parent, nullptr);
-  EXPECT_EQ(class_type->parent->class_name.name, "Node");
+  ASSERT_NE(class_type->class_decl, nullptr);
+  EXPECT_EQ(class_type->class_decl->class_name.name, "Node");
 }
 
 TEST(SymbolTableTests, ReturnsClassDeclarationOwnerForClassScope) {

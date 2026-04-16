@@ -61,10 +61,10 @@ add_library(
   ${FLEX_CompilerLexer_OUTPUTS}
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Parser.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Parsing/Types.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/ExecutableLowering.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/Lowering/ExecutableLowering.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMConstructUtils.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/LLVMIRLowering.cpp"
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Lowering/ObjectFileLowering.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/backend/Lowering/ObjectFileLowering.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Utils/ClassMemberLookup.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/Printer.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/Visitors/PrinterAST.cpp"
@@ -83,6 +83,7 @@ target_include_directories(
   compiler_frontend
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/include/frontend"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/backend"
     "${GENERATED_DIR}"
   PRIVATE
     "${LLVM_INCLUDE_DIRS}"
