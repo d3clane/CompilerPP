@@ -35,7 +35,7 @@ std::optional<ClassMemberLookupResult> LookupClassMember(
   const ClassType* current_class = &start_class;
 
   while (current_class != nullptr) {
-    const ClassDeclarationStatement* current_class_decl = current_class->parent;
+    const ClassDeclarationStatement* current_class_decl = current_class->class_decl;
     if (current_class_decl == nullptr) {
       return std::nullopt;
     }

@@ -45,7 +45,7 @@ struct ClassMethodType {
 };
 
 struct ClassType {
-  const ClassDeclarationStatement* parent = nullptr;
+  const ClassDeclarationStatement* class_decl = nullptr;
   const ClassType* base_class = nullptr;
   std::vector<ClassFieldType> fields;
   std::vector<ClassMethodType> methods;

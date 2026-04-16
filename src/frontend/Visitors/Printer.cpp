@@ -121,11 +121,11 @@ std::string PrintType(const Type* type) {
           [](const IntType&) -> std::string { return "int"; },
           [](const BoolType&) -> std::string { return "bool"; },
           [](const ClassType& class_type) -> std::string {
-            if (class_type.parent == nullptr) {
+            if (class_type.class_decl == nullptr) {
               return "<invalid-class>";
             }
 
-            return class_type.parent->class_name.name;
+            return class_type.class_decl->class_name.name;
           },
           [](const FuncType& func_type) -> std::string {
             std::string result = "func(";
@@ -393,8 +393,8 @@ std::string PrintClassDeclarationStatement(
   const ClassType* class_type = AsClassType(class_declaration.class_type);
   if (class_type != nullptr &&
       class_type->base_class != nullptr &&
-      class_type->base_class->parent != nullptr) {
-    result += ":" + class_type->base_class->parent->class_name.name;
+      class_type->base_class->class_decl != nullptr) {
+    result += ":" + class_type->base_class->class_decl->class_name.name;
   }
 
   result += " { ";

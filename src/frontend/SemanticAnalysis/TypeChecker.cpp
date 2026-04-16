@@ -33,11 +33,11 @@ std::string TypeToString(const Type* type) {
             return "int";
           },
           [](const ClassType& class_type) -> std::string {
-            if (class_type.parent == nullptr) {
+            if (class_type.class_decl == nullptr) {
               return "<invalid-class>";
             }
 
-            return class_type.parent->class_name.name;
+            return class_type.class_decl->class_name.name;
           },
           [](const FuncType& function_type) -> std::string {
             std::string result = "func(";
@@ -223,12 +223,12 @@ class TypeCheckerVisitor {
             [](const IntType&) {},
             [](const BoolType&) {},
             [this, node, &error_context](const ClassType& class_type) {
-              const ClassDeclarationStatement* class_declaration = class_type.parent;
+              const ClassDeclarationStatement* class_declaration = class_type.class_decl;
               if (class_declaration == nullptr ||
                   !IsClassTypeVisible(*class_declaration, node)) {
                 const std::string class_name =
-                    class_type.parent != nullptr
-                        ? class_type.parent->class_name.name
+                    class_type.class_decl != nullptr
+                        ? class_type.class_decl->class_name.name
                         : "<invalid-class>";
                 ReportCodeError(
                     node,
@@ -368,11 +368,11 @@ class TypeCheckerVisitor {
     if (class_type != nullptr &&
         class_type->base_class != nullptr) {
       const ClassDeclarationStatement* base_class =
-          class_type->base_class->parent;
+          class_type->base_class->class_decl;
       if (base_class == nullptr) {
         const std::string base_name =
-            class_type->base_class->parent != nullptr
-                ? class_type->base_class->parent->class_name.name
+            class_type->base_class->class_decl != nullptr
+                ? class_type->base_class->class_decl->class_name.name
                 : "<invalid-class>";
         ReportCodeError(
             &class_declaration,
@@ -829,8 +829,8 @@ class TypeCheckerVisitor {
         resolved_field->kind != ClassMemberKind::Field ||
         resolved_field->field_declaration == nullptr) {
       const std::string class_name =
-          receiver_class_type->parent != nullptr
-              ? receiver_class_type->parent->class_name.name
+          receiver_class_type->class_decl != nullptr
+              ? receiver_class_type->class_decl->class_name.name
               : "<invalid-class>";
       ReportCodeError(
           &field_access,
@@ -867,8 +867,8 @@ class TypeCheckerVisitor {
         resolved_method->kind != ClassMemberKind::Method ||
         resolved_method->method_declaration == nullptr) {
       const std::string class_name =
-          receiver_class_type->parent != nullptr
-              ? receiver_class_type->parent->class_name.name
+          receiver_class_type->class_decl != nullptr
+              ? receiver_class_type->class_decl->class_name.name
               : "<invalid-class>";
       ReportCodeError(
           &method_call,

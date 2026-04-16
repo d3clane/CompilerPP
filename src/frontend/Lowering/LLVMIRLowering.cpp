@@ -1249,7 +1249,7 @@ const ClassDeclarationStatement* FunctionLoweringContext::ResolveClassDeclaratio
     const Type* type) const {
   const ClassType* class_type = AsClassType(type);
   assert(class_type != nullptr);
-  const ClassDeclarationStatement* class_declaration = class_type->parent;
+  const ClassDeclarationStatement* class_declaration = class_type->class_decl;
   assert(class_declaration != nullptr);
 
   return class_declaration;
@@ -1500,8 +1500,8 @@ LoweredValue FunctionLoweringContext::AdjustValueToExpectedType(
   if (expected_class_type == nullptr || actual_class_type == nullptr) {
     return value;
   }
-  const ClassDeclarationStatement* expected_class = expected_class_type->parent;
-  const ClassDeclarationStatement* actual_class = actual_class_type->parent;
+  const ClassDeclarationStatement* expected_class = expected_class_type->class_decl;
+  const ClassDeclarationStatement* actual_class = actual_class_type->class_decl;
   assert(expected_class != nullptr);
   assert(actual_class != nullptr);
 

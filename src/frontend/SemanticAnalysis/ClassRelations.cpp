@@ -127,7 +127,7 @@ class ClassRelationsBuilder {
 
     for (const auto& [class_declaration, base_class_type] :
          visitor.unresolved_base_type_by_class_) {
-      const ClassDeclarationStatement* base_class = base_class_type->parent;
+      const ClassDeclarationStatement* base_class = base_class_type->class_decl;
       if (base_class != nullptr) {
         relations.base_class_by_class_[class_declaration] = base_class;
       }
