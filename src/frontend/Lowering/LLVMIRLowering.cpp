@@ -1226,8 +1226,10 @@ void FunctionLoweringContext::PreallocateFromElseTail(
 }
 
 bool FunctionLoweringContext::IsCurrentBlockTerminated() const {
-  return builder_.GetInsertBlock() != nullptr &&
-         builder_.GetInsertBlock()->getTerminator() != nullptr;
+  llvm::BasicBlock* block = builder_.GetInsertBlock();
+  return block != nullptr &&
+         !block->empty() &&
+         block->back().isTerminator();
 }
 
 std::optional<StorageLocation> FunctionLoweringContext::GetStorageForNode(
